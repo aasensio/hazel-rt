@@ -6,6 +6,20 @@ __pycache__/
 # C extensions
 *.so
 
+# Compiled object files 'o', libraries 'a', executables 'x', modules 'mod'
+src/*.[oax]
+src/*.mod
+ 
+# Hazel binaries
+src/hazel
+run/hazel
+invGUI
+synthGUI
+
+# Sublime Text project profiles
+*.sublime-workspace
+*.sublime-project
+
 # Distribution / packaging
 .Python
 build/
