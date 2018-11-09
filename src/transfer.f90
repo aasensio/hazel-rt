@@ -110,7 +110,7 @@ contains
         vmacro = in_params%vmacro
         in_params%vmacro = 0.0
         
-        do while (loop_iteration < 50 .and. relative_change(1) > 0.001d0 .and. relative_change(2) > 0.001d0)
+        do while (loop_iteration < 50 .and. relative_change(1) > 1d-3 .and. relative_change(2) > 1d-3)
 
             do loop_shell = 1, slab%nshells
             
@@ -246,13 +246,23 @@ contains
 
             loop_iteration = loop_iteration + 1
 
+            !+DEBUG
+            !write (*, '(a, i4, a, 2es20.8)') 'Iteration: ', loop_iteration - 1, ', nbar:     ', slab%nbar
+            !write (*, '(a, i4, a, 2es20.8)') 'Iteration: ', loop_iteration - 1, ', nbar_old: ', slab%nbar_old
+            !write (*, '(a, i4, a, 2es20.8)') 'Iteration: ', loop_iteration - 1, ', omega:     ', slab%omega
+            !write (*, '(a, i4, a, 2es20.8)') 'Iteration: ', loop_iteration - 1, ', omega_old: ', slab%omega_old
+            write (*, '(a, i4, a, es20.8, a, i4)') 'Iteration: ', loop_iteration - 1, ', max |dn/n|: ', maxval(abs(slab%nbar - slab%nbar_old) / abs(slab%nbar)), ' at layer ', maxloc(abs(slab%nbar - slab%nbar_old) / abs(slab%nbar), 1)
+            write (*, '(a, i4, a, es20.8, a, i4)') 'Iteration: ', loop_iteration - 1, ', max |do/o|: ', maxval(abs(slab%omega - slab%omega_old) / abs(slab%omega)), ' at layer ', maxloc(abs(slab%omega - slab%omega_old) / abs(slab%omega), 1)
+            !-DEBUG
+
             relative_change(1) = maxval(abs(slab%nbar - slab%nbar_old) / abs(slab%nbar))
             relative_change(2) = maxval(abs(slab%omega - slab%omega_old) / abs(slab%omega))
 
             slab%nbar_old = slab%nbar
             slab%omega_old = slab%omega
 
-            print *, 'Maximum relative change : ', relative_change
+            !print *, 'Maximum relative change : ', relative_change
+            !write (*, '(a, i4, a, 2es9.2)') 'Iteration: ', loop_iteration - 1, ', max. rel. change: ', relative_change
 
         enddo
 
@@ -374,6 +384,9 @@ contains
         write(18,*) slab%nshells
         do i = 1, slab%nshells
             write(18,*) maxval(slab%tau(i,:)), slab%nbar(i,1), slab%omega(i,1)
+            !+DEBUG
+            write (*, *) 'max tau, nbar, omega: ', maxval( slab%tau(i,:) ), slab%nbar(i,1), slab%omega(i,1)
+            !-DEBUG
         enddo
         close(18)
 

@@ -112,19 +112,19 @@ implicit none
 !*********************************
 !** NON-LINEAR MODE WITH RADIATIVE TRANSFER
 !*********************************	
-	if (working_mode == -1) then
-		if (verbose_mode == 1) then
-			print *, 'Working in NON-LINEAR mode'
-		endif
-		observation%n = fixed%no
-		allocate(observation%wl(observation%n))
-        allocate(observation%freq(observation%n))
-		if (.not.associated(inversion%stokes_unperturbed)) allocate(inversion%stokes_unperturbed(0:3,fixed%no))
-		call read_slab(input_slab_file, slab)				
-		call do_transfer(params, fixed, observation, slab, inversion%stokes_unperturbed, error)
-		!call write_final_profiles(output_inverted_profiles,observation,inversion)
-	endif
-    
+  if (working_mode == -1) then
+    if (verbose_mode == 1) then
+      print *, 'Working in NON-LINEAR mode'
+    endif
+    observation%n = fixed%no
+    allocate(observation%wl(observation%n))
+    allocate(observation%freq(observation%n))
+    if (.not.associated(inversion%stokes_unperturbed)) allocate(inversion%stokes_unperturbed(0:3,fixed%no))
+    call read_slab(input_slab_file, slab)
+    call do_transfer(params, fixed, observation, slab, inversion%stokes_unperturbed, error)
+    call write_final_profiles(output_inverted_profiles,observation,inversion)
+  endif
+
 !*********************************
 !** SYNTHESIS MODE
 !*********************************  

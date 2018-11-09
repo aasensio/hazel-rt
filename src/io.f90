@@ -562,44 +562,46 @@ contains
 !------------------------------------------------------------
 ! Read the file with the slab data
 !------------------------------------------------------------
-	subroutine read_slab(file,slab)
-	character(len=120) :: file
-	type(type_slab) :: slab
-	integer :: i
-	
-		open(unit=12,file=file,action='read',status='old')
-		call lb(12,5)
-		read(12,*) slab%nshells
-		if (verbose_mode == 1) then
-			print *, 'Number of shells=', slab%nshells
-		endif
+  subroutine read_slab(file,slab)
+  character(len=120) :: file
+  type(type_slab) :: slab
+  integer :: i
 
-		call lb(12,2)
-		read(12,*) slab%nmus_photosphere, slab%nmus_nophotosphere
-		if (verbose_mode == 1) then
-			print *, 'Number of mus=', slab%nmus_photosphere, slab%nmus_nophotosphere
-		endif
+    open(unit=12, file=file, action='read', status='old')
+    call lb(12, 5)
+    read(12, *) slab%nshells
+    if (verbose_mode == 1) then
+      print *, 'Number of shells=', slab%nshells
+    endif
 
-		slab%nmus = slab%nmus_photosphere + slab%nmus_nophotosphere
+    call lb(12, 2)
+    read(12, *) slab%nmus_photosphere, slab%nmus_nophotosphere
+    if (verbose_mode == 1) then
+      print *, 'Number of mus=', slab%nmus_photosphere, slab%nmus_nophotosphere
+    endif
 
-		allocate(slab%mus(slab%nmus))
-		allocate(slab%weights(slab%nmus))
+    slab%nmus = slab%nmus_photosphere + slab%nmus_nophotosphere
 
-		allocate(slab%z(slab%nshells))
-		allocate(slab%density(slab%nshells))
-		allocate(slab%velocity(slab%nshells))
-		allocate(slab%B(slab%nshells))
-		allocate(slab%thB(slab%nshells))
-		allocate(slab%chiB(slab%nshells))
-		
-		call lb(12,2)
-		do i = 1, slab%nshells
-			read(12,*) slab%z(i), slab%density(i), slab%velocity(i), slab%B(i), slab%thB(i), slab%chiB(i)
-			slab%z(i) = slab%z(i) * 1.d5
-		enddo
-		
-		close(12)
-	end subroutine read_slab
+    allocate(slab%mus(slab%nmus))
+    allocate(slab%weights(slab%nmus))
+
+    allocate(slab%z(slab%nshells))
+    allocate(slab%density(slab%nshells))
+    allocate(slab%velocity(slab%nshells))
+    allocate(slab%B(slab%nshells))
+    allocate(slab%thB(slab%nshells))
+    allocate(slab%chiB(slab%nshells))
+    allocate(slab%damping(slab%nshells))
+    allocate(slab%vthermal(slab%nshells))
+
+    call lb(12, 3)
+    do i = 1, slab%nshells
+      read(12, *) slab%z(i), slab%density(i), slab%velocity(i), slab%B(i), slab%thB(i), slab%chiB(i), slab%damping(i), slab%vthermal(i)
+      slab%z(i) = slab%z(i) * 1.d5
+    enddo
+
+    close(12)
+  end subroutine read_slab
 
 !------------------------------------------------------------
 ! Number of columns in a line

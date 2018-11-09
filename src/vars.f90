@@ -87,7 +87,7 @@ implicit none
 		real(kind=8), pointer :: boundary(:,:,:), nbar_old(:,:), omega_old(:,:)
 		real(kind=8), pointer :: emission_vector(:,:,:)
 		real(kind=8), pointer :: propagation_matrix(:,:,:,:)
-		real(kind=8), pointer :: mus(:), weights(:), velocity(:), B(:), thB(:), chiB(:)
+    real(kind=8), pointer :: mus(:), weights(:), velocity(:), B(:), thB(:), chiB(:), damping(:), vthermal(:)
 	end type type_slab
 
 	type atom_model
