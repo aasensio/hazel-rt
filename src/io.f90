@@ -587,7 +587,7 @@ contains
 
     allocate(slab%z(slab%nshells))
     allocate(slab%density(slab%nshells))
-    allocate(slab%velocity(slab%nshells))
+    allocate(slab%v_z(slab%nshells))
     allocate(slab%B(slab%nshells))
     allocate(slab%thB(slab%nshells))
     allocate(slab%chiB(slab%nshells))
@@ -596,7 +596,7 @@ contains
 
     call lb(12, 3)
     do i = 1, slab%nshells
-      read(12, *) slab%z(i), slab%density(i), slab%velocity(i), slab%B(i), slab%thB(i), slab%chiB(i), slab%damping(i), slab%vthermal(i)
+      read(12, *) slab%z(i), slab%density(i), slab%v_z(i), slab%B(i), slab%thB(i), slab%chiB(i), slab%damping(i), slab%vthermal(i)
       slab%z(i) = slab%z(i) * 1.d5
     enddo
 

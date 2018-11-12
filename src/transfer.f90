@@ -272,7 +272,7 @@ contains
         do loop_shell = 1, slab%nshells
 
 ! Now, restore the velocity for the final formal solution        
-            in_params%vmacro = slab%velocity(loop_shell)
+            in_params%vmacro = slab%v_z(loop_shell)
             in_params%bgauss = slab%B(loop_shell)
             in_params%thetabd = slab%thB(loop_shell)
             in_params%chibd = slab%chiB(loop_shell)            
