@@ -388,7 +388,7 @@ contains
 
         enddo
 
-        call synthesize_stokes(slab, in_fixed, output)
+        call synthesize_stokes(slab, in_params, in_fixed, output)
 
         open(unit=18,file='Jbar_tensors.dat',action='write',status='replace')
         write(18,*) slab%nshells
@@ -538,8 +538,9 @@ contains
 ! Performs the formal solution of the RT equation for a plane-parallel magnetized atmosphere
 ! for a given source function and opacity
 ! ---------------------------------------------------------    
-    subroutine synthesize_stokes(slab, in_fixed, output)
+    subroutine synthesize_stokes(slab, in_params, in_fixed, output)
     type(type_slab) :: slab
+    type(variable_parameters) :: in_params
     type(fixed_parameters) :: in_fixed
     real(kind=8) :: output(0:3,in_fixed%no)
     real(kind=8) :: formal_sol_polarized(4), Inten(4)
@@ -580,9 +581,11 @@ contains
             kto = n
             kstep = 1
 
-! Boundary condition
-            Inten = 0.d0
-            Inten(1) = I0_allen(in_fixed%wl, mu)
+            ! Stokes vector at the lower boundary: no polarization, intensity is
+            ! from Eq. (12.33) from Landi degl'Innocenti & Landolfi (2004).
+            ! The last formula is expanded for simplicity.
+            Inten(1)   = I0_allen( in_fixed%wl, sqrt( 1d0 + ( mu**2 - 1d0 ) * ( 1d0 + in_params%height / RSUN )**2 ) )
+            Inten(2:4) = 0d0
 
             do k = kfrom, kto
 
