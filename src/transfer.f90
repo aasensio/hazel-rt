@@ -271,18 +271,28 @@ contains
 
         do loop_shell = 1, slab%nshells
 
-! Now, restore the velocity for the final formal solution        
-            in_params%vmacro = slab%v_z(loop_shell)
-            in_params%bgauss = slab%B(loop_shell)
-            in_params%thetabd = slab%thB(loop_shell)
-            in_params%chibd = slab%chiB(loop_shell)            
-            
-! Fill and solve the statistical equilibrium equations
-            nbarExternal = slab%nbar(loop_shell,:)
-            omegaExternal = slab%omega(loop_shell,:)
+            ! For the final formal solution, take the LoS projection of the
+            ! vertical velocity in the current slab.  Hazel has a stupid
+            ! historical convention (like many other things in observational
+            ! astronomy) that vmacro is positive for redshifted profiles.  This
+            ! is opposite to the positive direction of the angles and the
+            ! magnetic field as the positive vmacro points downwards, against
+            ! the OZ direction.  So, negate the projection to conform with this
+            ! convention.
+            in_params%vmacro = -slab%v_z( loop_shell ) * cos( in_fixed%thetad * PI / 180d0 )
 
-            call fill_SEE(in_params, in_fixed, 1, error)
-                
+            ! Restore the magnetic field vector in the current slab.
+            in_params%bgauss  = slab%B(    loop_shell )
+            in_params%thetabd = slab%thB(  loop_shell )
+            in_params%chibd   = slab%chiB( loop_shell )
+
+            ! To fill and solve the statistical equilibrium equations, pass the obtained nbar and omega in the current shell.
+            nbarExternal  = slab%nbar(  loop_shell, : )
+            omegaExternal = slab%omega( loop_shell, : )
+
+            ! For the first component only...
+            call fill_SEE( in_params, in_fixed, 1, error )
+
 ! Calculate the absorption/emission coefficients for a given transition
 ! TODO : set velocity to zero for velocity-free approximation
             call calc_rt_coef(in_params, in_fixed, in_observation, 1)
