@@ -552,7 +552,7 @@ contains
     real(kind=8) :: sm(4), s0(4), sp(4), mat1(4,4), mat2(4,4), mat3(4,4), Ic
     
         n = slab%nshells
-        nmus = slab%nmus
+        !nmus = slab%nmus
         
         allocate(ab_matrix(4,4,n))
         allocate(source_vector(4,n))
@@ -572,7 +572,8 @@ contains
                 source_vector(i,:) = slab%emission_vector(i,:,freq) / slab%propagation_matrix(1,1,:,freq)
             enddo
 
-            mu = 1.d0
+            ! The mu direction cosine points to the observer at (thetad, chid, gammad).
+            mu = cos( in_fixed%thetad * PI / 180d0 )
 
 ! If going upwards
             kfrom = 2

@@ -24,7 +24,7 @@
 0.0  0.0  0.0
 
 # Apparent height (if negative) or real height (if positive) of the atoms in arcsec
-3.0
+2.1
 
 # Optical depth of the slab in the maximum of I (slab) or strength of the line (ME)
 1.0
@@ -43,13 +43,13 @@
 1
 
 # Observation angle with respect to the local solar vertical theta,chi,gamma [degrees]
-0.0  0.0  90.0
+37.0  0.0  90.0
 
 # Wavelength axis: minimum, maximum and number of grid points
 -2.131846810953576  2.5582161731442916  200
 
 # Line wavelength [A], Doppler velocity [km/s] and damping [a]
-10829.0911  7.0  0.0
+10829.0911  7.24  0.25
 
 # Macroscopic velocity [km/s] (>0 is a redshift)
 0.0
