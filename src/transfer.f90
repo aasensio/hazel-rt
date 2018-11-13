@@ -113,21 +113,30 @@ contains
         do while (loop_iteration < 50 .and. relative_change(1) > 1d-3 .and. relative_change(2) > 1d-3)
 
             do loop_shell = 1, slab%nshells
-            
-! Fill and solve the statistical equilibrium equations
-                in_params%bgauss = slab%B(i)
-                in_params%thetabd = slab%thB(i)
-                in_params%chibd = slab%chiB(i)
 
-                nbarExternal = slab%nbar(loop_shell,:)
-                omegaExternal = slab%omega(loop_shell,:)
+                ! To fill and solve the statistical equilibrium equations,
+                ! restore  the magnetic field vector in the current slab and...
+                in_params%bgauss  = slab%B(    loop_shell )
+                in_params%thetabd = slab%thB(  loop_shell )
+                in_params%chibd   = slab%chiB( loop_shell )
 
-                call fill_SEE(in_params, in_fixed, 1, error)
-                
-! Calculate the absorption/emission coefficients for a given transition
-! TODO : set velocity to zero for velocity-free approximation
-                call calc_rt_coef(in_params, in_fixed, in_observation, 1)
-                        
+                ! ...pass the obtained nbar and omega in the current shell.
+                nbarExternal  = slab%nbar(  loop_shell, : )
+                omegaExternal = slab%omega( loop_shell, : )
+
+                ! For the first component only...
+                call fill_SEE( in_params, in_fixed, 1, error )
+
+                ! To calculate the absorption/emission coefficients, restore the
+                ! damping parameters...
+                in_params%damping = slab%damping(  loop_shell )
+                in_params%vdopp   = slab%vthermal( loop_shell )
+                ! TODO: The LoS velocity is needed as well but it should be made
+                ! with a different angle quadrature.
+                !in_params%vmacro  = slab%vmacro( loop_shell )
+
+                call calc_rt_coef( in_params, in_fixed, in_observation, 1 )
+
                 if (.not.allocated(epsI)) allocate(epsI(in_fixed%no))
                 if (.not.allocated(epsQ)) allocate(epsQ(in_fixed%no))
                 if (.not.allocated(epsU)) allocate(epsU(in_fixed%no))
@@ -281,12 +290,13 @@ contains
             ! convention.
             in_params%vmacro = -slab%v_z( loop_shell ) * cos( in_fixed%thetad * PI / 180d0 )
 
-            ! Restore the magnetic field vector in the current slab.
+            ! To fill and solve the statistical equilibrium equations, restore 
+            ! the magnetic field vector in the current slab and...
             in_params%bgauss  = slab%B(    loop_shell )
             in_params%thetabd = slab%thB(  loop_shell )
             in_params%chibd   = slab%chiB( loop_shell )
 
-            ! To fill and solve the statistical equilibrium equations, pass the obtained nbar and omega in the current shell.
+            ! ...pass the obtained nbar and omega in the current shell.
             nbarExternal  = slab%nbar(  loop_shell, : )
             omegaExternal = slab%omega( loop_shell, : )
 
