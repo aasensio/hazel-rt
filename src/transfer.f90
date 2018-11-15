@@ -7,106 +7,107 @@ implicit none
 contains
 
 !------------------------------------------------------------
-! Initialize the values of nbar and omega to Allen's values
-!------------------------------------------------------------
-    subroutine initialize_slab_tensors(input_model_file, slab, in_params, in_fixed)
-    type(variable_parameters) :: in_params
-    type(fixed_parameters) :: in_fixed
-    character(len=120) :: input_model_file
-    type(type_slab) :: slab
-    integer :: nt
-    integer :: n, nterml, ntermu
-    real(kind=8) :: ae, wavelength
-
-        
-        open(unit=12,file=input_model_file,action='read',status='old')
-        call lb(12,file_pointer)
-        
-        read(12,*) ntran
-
-        do nt = 1, ntran
-            read(12,*) n, nterml, ntermu, ae, wavelength            
-            slab%nbar(:,nt) = nbar_allen(wavelength, in_fixed, in_params, 1.d0)
-            slab%omega(:,nt) = omega_allen(wavelength, in_fixed, in_params, 1.d0)
-        enddo
-        close(12)
-
-    end subroutine initialize_slab_tensors
-
-!------------------------------------------------------------
 ! Do a synthesis calling the appropriate routines
 !------------------------------------------------------------
-    subroutine do_transfer(in_params,in_fixed,in_observation,slab,output, error)
-    type(variable_parameters) :: in_params, in_trial
+    subroutine do_transfer( in_params, in_fixed, in_observation, slab, output, error )
+    type(variable_parameters) :: in_params
     type(type_observation) :: in_observation
     type(fixed_parameters) :: in_fixed
     type(type_slab) :: slab
+    real(kind=8) :: output(0:3,in_fixed%no)
     integer :: i, loop_iteration, loop_shell, error, j
-    real(kind=8) :: output(0:3,in_fixed%no), I0, Q0, U0, V0, ds, Imax, mu, Ic, factor, eta0, psim, psi0
-    real(kind=8) :: illumination_cone_cosine, illumination_cone_sine, dnum, relative_change(2), vmacro
-    real(kind=8), allocatable, dimension(:) :: epsI, epsQ, epsU, epsV, etaI, etaQ, etaU, etaV, dtau            
+    real(kind=8) :: I0, Q0, U0, V0, ds, Imax, Ic, factor, eta0, psim, psi0
+    real(kind=8) :: dnum, relative_change(2), vmacro
+    real(kind=8), allocatable, dimension(:) :: epsI, epsQ, epsU, epsV, etaI, etaQ, etaU, etaV, dtau
     real(kind=8), allocatable, dimension(:) :: rhoQ, rhoU, rhoV, delta, prof(:)
     real(kind=8), allocatable :: StokesM(:), kappa_prime(:,:), kappa_star(:,:), identity(:,:)
     real(kind=8), allocatable :: source(:), m1(:,:), m2(:,:), Stokes0(:)
     real(kind=8), allocatable :: O_evol(:,:), psi_matrix(:,:), J00(:), J20(:), J00_nu(:,:), J20_nu(:,:)
 
+    integer(kind=4) :: line, layer, angle
+    real(kind=8) :: mu, illumination_cone_cosine, illumination_cone_sine, cos_alpha
 
-        if (verbose_mode == 1) then
-            print *, 'Starting transfer...'
+      if ( verbose_mode == 1 ) then
+          print *, 'Starting transfer...'
+      endif
+      allocate(J00_nu(slab%nshells,in_fixed%no))
+      allocate(J20_nu(slab%nshells,in_fixed%no))
+      allocate(J00(slab%nshells))
+      allocate(J20(slab%nshells))
+
+      ! Set weights and mus for the photospheric cone
+      !call gauleg(illumination_cone_cosine,1.d0,slab%mus(1:slab%nmus_photosphere),&
+      !    slab%weights(1:slab%nmus_photosphere),slab%nmus_photosphere)
+
+      ! Set weights and mus for the rest of angles
+      !call gauleg(-1.d0,illumination_cone_cosine,slab%mus(slab%nmus_photosphere+1:slab%nmus),&
+      !    slab%weights(slab%nmus_photosphere+1:slab%nmus),slab%nmus_nophotosphere)
+
+      ! Create arrays for the current and the previous radiation field
+      ! parameters, $\bar{n}$ and $\omega$, ...
+      allocate( slab%nbar(      slab%nshells, atom%ntran ) )
+      allocate( slab%omega(     slab%nshells, atom%ntran ) )
+      allocate( slab%nbar_old(  slab%nshells, atom%ntran ) )
+      allocate( slab%omega_old( slab%nshells, atom%ntran ) )
+
+      ! ...and initialize the current nbar and omega in all layers with the same
+      ! values using Allen's tables to start iterating.
+      if ( verbose_mode == 1 ) then
+          write (*, '(a)') 'Initial nbar and omega:'
+      endif
+      do line = 1, atom%ntran
+        slab%nbar(  :, line ) = nbar_allen(  atom%wavelength( line ), in_fixed, in_params, atom%reduction_factor(       line ) )
+        slab%omega( :, line ) = omega_allen( atom%wavelength( line ), in_fixed, in_params, atom%reduction_factor_omega( line ) )
+        if ( verbose_mode == 1 ) then
+            write (*, '(4x, a, f9.3, a, e8.2, a, e8.2)') 'wavelength = ', atom%wavelength( line ), ' A, nbar = ', slab%nbar( 1, line ), ', omega = ', slab%omega( 1, line )
         endif
-        allocate(J00_nu(slab%nshells,in_fixed%no))
-        allocate(J20_nu(slab%nshells,in_fixed%no))
-        allocate(J00(slab%nshells))
-        allocate(J20(slab%nshells))
-        
-! Calculate the illumination cone at a given height for calculating the
-! angular integration
-        illumination_cone_sine = RSUN / (RSUN + in_params%height)
-        illumination_cone_cosine = sqrt(1.d0-illumination_cone_sine**2)
+      enddo
+      ! Set the previous values to the current ones.
+      slab%nbar_old  = slab%nbar
+      slab%omega_old = slab%omega
 
-! Set weights and mus for the photospheric cone
-        !call gauleg(illumination_cone_cosine,1.d0,slab%mus(1:slab%nmus_photosphere),&
-        !    slab%weights(1:slab%nmus_photosphere),slab%nmus_photosphere)
-        
-! Set weights and mus for the rest of angles
-        !call gauleg(-1.d0,illumination_cone_cosine,slab%mus(slab%nmus_photosphere+1:slab%nmus),&
-        !    slab%weights(slab%nmus_photosphere+1:slab%nmus),slab%nmus_nophotosphere)
+      ! Create an array for the boundary conditions...
+      allocate( slab%boundary( 4, slab%aq_size, in_fixed%no ), source = 0d0 )
 
-        allocate(slab%nbar(slab%nshells,atom%ntran))
-        allocate(slab%omega(slab%nshells,atom%ntran))
+      ! The illumination cone for a given height has
+      illumination_cone_sine   = RSUN / ( RSUN + in_params%height )
+      illumination_cone_cosine = sqrt( 1d0 - illumination_cone_sine**2 )
+      ! from Eq. (12.32) of Landi degl'Innocenti & Landolfi (2004).
 
-        allocate(slab%nbar_old(slab%nshells,atom%ntran))
-        allocate(slab%omega_old(slab%nshells,atom%ntran))
+      ! ...and use Allen's tables for the center-to-limb variation of the
+      ! continuum intensity to set all Stokes I values for the current angle.
+      if ( verbose_mode == 1 ) then
+          write (*, '(a)') 'Boundary intensities:'
+      endif
+      do angle = 1, slab%aq_size
+        ! for all inclinations $\theta$ having $\mu = \cos\theta > \cos\gamma$
+        mu = cos( slab%aq_inclination( angle ) )
+        if ( mu > illumination_cone_cosine ) then
+          ! Eq. 12.33 of Landi degl'Innocenti & Landolfi (2004).
+          cos_alpha = sqrt( mu**2 - illumination_cone_cosine**2 ) / illumination_cone_sine
+          slab%boundary( 1, angle, : ) = I0_allen( in_fixed%wl, cos_alpha )
+        else
+          ! For other angles there is no incoming boundary intensity and it is
+          ! already set to zero.
+          continue
+        endif
+        if ( verbose_mode == 1 ) then
+          write (*, '(4x, a, f6.3, a, e8.2)') 'mu = ', mu, ', I0 = ', slab%boundary( 1, angle, 1 )
+        endif
+      enddo
+      stop
 
-        allocate(slab%emission_vector(4,slab%nshells,in_fixed%no))
-        allocate(slab%propagation_matrix(4,4,slab%nshells,in_fixed%no))
-        allocate( slab%boundary( 4, slab%aq_size, in_fixed%no ) )
 
-        allocate(slab%tau(slab%nshells,in_fixed%no))
+      allocate(slab%emission_vector(4,slab%nshells,in_fixed%no))
+      allocate(slab%propagation_matrix(4,4,slab%nshells,in_fixed%no))
 
-        allocate(prof(in_fixed%no))
+      allocate(slab%tau(slab%nshells,in_fixed%no))
 
-! Initialize the values of nbar and omega to the Allen's values to start iterating
-        call initialize_slab_tensors(input_model_file, slab, in_params, in_fixed)
+      allocate(prof(in_fixed%no))
 
-! Boundary conditions
-        slab%boundary = 0.d0
-        !do i = 1, slab%nmus_photosphere
-        do i = 1, slab%aq_size
-! From Eq. 12.33 of Landi degl'Innocenti & Landolfi (2004)
-            !slab%boundary(1,i,:) = I0_allen(in_fixed%wl, sqrt(slab%mus(i)**2-illumination_cone_cosine**2) / illumination_cone_sine)
-            slab%boundary(1,i,:) = I0_allen( in_fixed%wl, sqrt( slab%aq_inclination(i)**2 - illumination_cone_cosine**2 ) / illumination_cone_sine )
-        enddo
+      relative_change = 100.d0
 
-        slab%nbar_old = slab%nbar
-        slab%omega_old = slab%omega
-
-        print *, slab%nbar
-        print *, slab%omega
-
-        relative_change = 100.d0
-
-        loop_iteration = 1
+      loop_iteration = 1
 
 ! velocity-free approximation
         vmacro = in_params%vmacro

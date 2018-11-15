@@ -3,7 +3,7 @@
 ***********************************************
 
 # Input model file
-'ATOMS/helium_2lev.mod'
+'ATOMS/helium.mod'
 
 # Initial parameters file
 'init_parameters.dat'
@@ -48,7 +48,7 @@
 'invert_parameters.dat'
 
 # Verbose mode (0-> no, 1-> yes)
-0
+1
 
 # Linear system solver (0-> LU, 1-> CG)
 0
