@@ -1,12 +1,28 @@
-***********************************************
+********************************************************************************
 * Configuration file for slab (first value in tabulation is closer to photosphere)
-***********************************************
+********************************************************************************
+
+# Angle quadrature size.  Lebedev quadrature of degree 5 with 14 directions.
+14
+
+# azimuth 	 inclination 	  weight
+      0.0    90.            0.06666667
+    180.0    90.            0.06666667
+     90.0    90.            0.06666667
+    -90.0    90.            0.06666667
+      0.0     0.            0.06666667
+      0.0   180.            0.06666667
+     45.0    54.73561032    0.075
+     45.0   125.26438968    0.075
+    -45.0    54.73561032    0.075
+    -45.0   125.26438968    0.075
+    135.0    54.73561032    0.075
+    135.0   125.26438968    0.075
+   -135.0    54.73561032    0.075
+   -135.0   125.26438968    0.075 
 
 # Number of shells 
 3
-
-# Number of angles for photospheric field and the rest of the sphere 
-3 7
 
 #  height     density      v_z         B     thB    phiB  damping  v_thermal
 #    [km]     [cm^-3]   [km/s]   [Gauss]   [deg]   [deg]      [a]     [km/s]

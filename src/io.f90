@@ -569,34 +569,46 @@ contains
 
     open(unit=12, file=file, action='read', status='old')
     call lb(12, 5)
-    read(12, *) slab%nshells
-    if (verbose_mode == 1) then
-      print *, 'Number of shells=', slab%nshells
-    endif
 
+    ! Read the size of the angle quadrature...
+    read(12, *) slab%aq_size
     call lb(12, 2)
-    read(12, *) slab%nmus_photosphere, slab%nmus_nophotosphere
     if (verbose_mode == 1) then
-      print *, 'Number of mus=', slab%nmus_photosphere, slab%nmus_nophotosphere
+      print *, 'Number of angles = ', slab%aq_size
     endif
 
-    slab%nmus = slab%nmus_photosphere + slab%nmus_nophotosphere
+    ! ...create three tables for two polar angles and angular weights...
+    allocate( slab%aq_azimuth(     slab%aq_size ) )
+    allocate( slab%aq_inclination( slab%aq_size ) )
+    allocate( slab%aq_weight(      slab%aq_size ) )
 
-    allocate(slab%mus(slab%nmus))
-    allocate(slab%weights(slab%nmus))
+    ! ...and read them.
+    do i = 1, slab%aq_size
+      read(12, *) slab%aq_azimuth(i), slab%aq_inclination(i), slab%aq_weight(i)
+    enddo
 
-    allocate(slab%z(slab%nshells))
-    allocate(slab%density(slab%nshells))
-    allocate(slab%v_z(slab%nshells))
-    allocate(slab%B(slab%nshells))
-    allocate(slab%thB(slab%nshells))
-    allocate(slab%chiB(slab%nshells))
-    allocate(slab%damping(slab%nshells))
-    allocate(slab%vthermal(slab%nshells))
+    ! Read the number of shells in the cake model...
+    call lb(12, 2)
+    read(12, *) slab%nshells
+    if ( verbose_mode == 1 ) then
+      print *, 'Number of shells = ', slab%nshells
+    endif
 
+    ! ...create eight tables for slab properties...
+    allocate( slab%z(        slab%nshells ) )
+    allocate( slab%density(  slab%nshells ) )
+    allocate( slab%v_z(      slab%nshells ) )
+    allocate( slab%B(        slab%nshells ) )
+    allocate( slab%thB(      slab%nshells ) )
+    allocate( slab%chiB(     slab%nshells ) )
+    allocate( slab%damping(  slab%nshells ) )
+    allocate( slab%vthermal( slab%nshells ) )
+
+    ! ...and read them all.
     call lb(12, 3)
     do i = 1, slab%nshells
       read(12, *) slab%z(i), slab%density(i), slab%v_z(i), slab%B(i), slab%thB(i), slab%chiB(i), slab%damping(i), slab%vthermal(i)
+      ! Convert heights from km to cm.  Both velocities are converted inside rt_coef from km/s to cm/s.
       slab%z(i) = slab%z(i) * 1.d5
     enddo
 

@@ -65,12 +65,12 @@ contains
         illumination_cone_cosine = sqrt(1.d0-illumination_cone_sine**2)
 
 ! Set weights and mus for the photospheric cone
-        call gauleg(illumination_cone_cosine,1.d0,slab%mus(1:slab%nmus_photosphere),&
-            slab%weights(1:slab%nmus_photosphere),slab%nmus_photosphere)
+        !call gauleg(illumination_cone_cosine,1.d0,slab%mus(1:slab%nmus_photosphere),&
+        !    slab%weights(1:slab%nmus_photosphere),slab%nmus_photosphere)
         
 ! Set weights and mus for the rest of angles
-        call gauleg(-1.d0,illumination_cone_cosine,slab%mus(slab%nmus_photosphere+1:slab%nmus),&
-            slab%weights(slab%nmus_photosphere+1:slab%nmus),slab%nmus_nophotosphere)
+        !call gauleg(-1.d0,illumination_cone_cosine,slab%mus(slab%nmus_photosphere+1:slab%nmus),&
+        !    slab%weights(slab%nmus_photosphere+1:slab%nmus),slab%nmus_nophotosphere)
 
         allocate(slab%nbar(slab%nshells,atom%ntran))
         allocate(slab%omega(slab%nshells,atom%ntran))
@@ -80,7 +80,7 @@ contains
 
         allocate(slab%emission_vector(4,slab%nshells,in_fixed%no))
         allocate(slab%propagation_matrix(4,4,slab%nshells,in_fixed%no))
-        allocate(slab%boundary(4,slab%nmus,in_fixed%no))
+        allocate( slab%boundary( 4, slab%aq_size, in_fixed%no ) )
 
         allocate(slab%tau(slab%nshells,in_fixed%no))
 
@@ -91,9 +91,11 @@ contains
 
 ! Boundary conditions
         slab%boundary = 0.d0
-        do i = 1, slab%nmus_photosphere
+        !do i = 1, slab%nmus_photosphere
+        do i = 1, slab%aq_size
 ! From Eq. 12.33 of Landi degl'Innocenti & Landolfi (2004)
-            slab%boundary(1,i,:) = I0_allen(in_fixed%wl, sqrt(slab%mus(i)**2-illumination_cone_cosine**2) / illumination_cone_sine)
+            !slab%boundary(1,i,:) = I0_allen(in_fixed%wl, sqrt(slab%mus(i)**2-illumination_cone_cosine**2) / illumination_cone_sine)
+            slab%boundary(1,i,:) = I0_allen( in_fixed%wl, sqrt( slab%aq_inclination(i)**2 - illumination_cone_cosine**2 ) / illumination_cone_sine )
         enddo
 
         slab%nbar_old = slab%nbar
@@ -435,7 +437,8 @@ contains
     real(kind=8) :: sm(4), s0(4), sp(4), mat1(4,4), mat2(4,4), mat3(4,4)
     
         n = slab%nshells
-        nmus = slab%nmus
+        !nmus = slab%nmus
+        nmus = slab%aq_size
         
         allocate(ab_matrix(4,4,n))
         allocate(source_vector(4,n))
@@ -454,7 +457,8 @@ contains
 
         do loop_mu = 1, nmus
 
-            mu = slab%mus(loop_mu)
+            !mu = slab%mus(loop_mu)
+            mu = cos( slab%aq_inclination( loop_mu ) )
 
 ! If going upwards
             if (mu > 0) then
@@ -472,11 +476,11 @@ contains
             Inten = slab%boundary(:,loop_mu,freq)
 
 ! Calculate J00
-            J00(kfrom-kstep) = J00(kfrom-kstep) + J00_FACTOR * slab%weights(loop_mu) * Inten(1)
+            J00(kfrom-kstep) = J00(kfrom-kstep) + J00_FACTOR * slab%aq_weight(loop_mu) * Inten(1)
 
 ! Calculate J20 taking into account the contribution of I, Q and U
             Qtilde = cos(2.d0*gamma*PI/180.d0) * Inten(2) - sin(2.d0*gamma*PI/180.d0) * Inten(3)
-            J20(kfrom-kstep) = J20(kfrom-kstep) + J20_FACTOR * slab%weights(loop_mu) * &
+            J20(kfrom-kstep) = J20(kfrom-kstep) + J20_FACTOR * slab%aq_weight(loop_mu) * &
                 ( (3.d0*mu**2-1.d0) * Inten(1) - 3.d0*(1.d0-mu**2) * Qtilde )
 
             do k = kfrom, kto
@@ -529,11 +533,11 @@ contains
                 endif
 
 ! Calculate J00
-                J00(k) = J00(k) + J00_FACTOR * slab%weights(loop_mu) * Inten(1)
+                J00(k) = J00(k) + J00_FACTOR * slab%aq_weight(loop_mu) * Inten(1)
 
 ! Calculate J20 taking into account the contribution of I, Q and U
                 Qtilde = cos(2.d0*gamma*PI/180.d0) * Inten(2) - sin(2.d0*gamma*PI/180.d0) * Inten(3)
-                J20(k) = J20(k) + J20_FACTOR * slab%weights(loop_mu) * &
+                J20(k) = J20(k) + J20_FACTOR * slab%aq_weight(loop_mu) * &
                     ( (3.d0*mu**2-1.d0) * Inten(1) - 3.d0*(1.d0-mu**2) * Qtilde )
                         
             enddo

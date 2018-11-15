@@ -82,12 +82,13 @@ implicit none
 	end type type_inversion
 
 	type type_slab
-		integer :: nshells, nmus_photosphere, nmus_nophotosphere, nmus
-		real(kind=8), pointer :: nbar(:,:), omega(:,:), Lambda(:), z(:), density(:), tau(:,:)
+		integer :: nshells, aq_size
+		real(kind=8), pointer :: nbar(:,:), omega(:,:), Lambda(:), tau(:,:)
 		real(kind=8), pointer :: boundary(:,:,:), nbar_old(:,:), omega_old(:,:)
 		real(kind=8), pointer :: emission_vector(:,:,:)
 		real(kind=8), pointer :: propagation_matrix(:,:,:,:)
-    real(kind=8), pointer :: mus(:), weights(:), v_z(:), B(:), thB(:), chiB(:), damping(:), vthermal(:)
+    real(kind=8), pointer :: z(:), density(:), v_z(:), B(:), thB(:), chiB(:), damping(:), vthermal(:)
+    real(kind=8), pointer :: aq_azimuth(:), aq_inclination(:), aq_weight(:)
 	end type type_slab
 
 	type atom_model
