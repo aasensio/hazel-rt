@@ -565,12 +565,31 @@ contains
   subroutine read_slab(file,slab)
   character(len=120) :: file
   type(type_slab) :: slab
-  integer :: i
+  integer :: i, nt, index
 
     open(unit=12, file=file, action='read', status='old')
+
+    ! Read the number of multiplets...
     call lb(12, 5)
+    read(12, *) nt
+    if ( verbose_mode == 1 ) then
+      print *, 'Number of multiplets in the spectrum = ', nt
+    endif
+
+    allocate( multiplets( nt ) )
+
+    ! ...and read properties of the multiplet quadratures.
+    index = 1
+    call lb(12, 2)
+    do i = 1, nt
+      read(12, *) multiplets(i)%wl, multiplets(i)%omin, multiplets(i)%omax, multiplets(i)%no
+      multiplets(i)%begin = index
+      index = index + multiplets(i)%no
+      multiplets(i)%end   = index - 1
+    enddo
 
     ! Read the size of the angle quadrature...
+    call lb(12, 2)
     read(12, *) slab%aq_size
     call lb(12, 2)
     if (verbose_mode == 1) then
@@ -613,6 +632,7 @@ contains
     enddo
 
     close(12)
+    stop
   end subroutine read_slab
 
 !------------------------------------------------------------

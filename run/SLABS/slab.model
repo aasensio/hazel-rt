@@ -2,6 +2,15 @@
 * Configuration file for slab (first value in tabulation is closer to photosphere)
 ********************************************************************************
 
+# Number of multiplets.  Must strictly correspond to the model atom.
+4
+
+# wavelength [A]    begin [A]   end [A]     number of wavelengths
+      10829.0911       -2.132     2.558     200
+       3888.6046       -0.750     0.750      50
+       7065.7085       -1.300     1.300     100
+       5875.9663       -1.200     1.200     150
+
 # Angle quadrature size.  Lebedev quadrature of degree 5 with 14 directions.
 14
 

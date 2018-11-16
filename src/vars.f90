@@ -96,8 +96,13 @@ implicit none
 		integer, pointer :: nterml(:), ntermu(:)
 		real(kind=8), pointer :: ae(:), wavelength(:), reduction_factor(:), reduction_factor_omega(:), j10(:)
 	end type atom_model
-		
-	
+
+  type multiplet
+    real(kind=8) :: wl, omin, omax
+    integer(kind=4) :: no, begin, end
+  end type multiplet
+  type(multiplet), dimension(:), allocatable :: multiplets
+
 	type(variable_parameters) :: params, trial, scaled_params, errorparams
 	type(fixed_parameters) :: fixed
 	type(type_observation) :: observation
