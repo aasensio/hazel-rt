@@ -30,25 +30,13 @@ contains
       if ( verbose_mode == 1 ) then
           print *, 'Starting transfer...'
       endif
-      allocate(J00_nu(slab%nshells,in_fixed%no))
-      allocate(J20_nu(slab%nshells,in_fixed%no))
-      allocate(J00(slab%nshells))
-      allocate(J20(slab%nshells))
-
-      ! Set weights and mus for the photospheric cone
-      !call gauleg(illumination_cone_cosine,1.d0,slab%mus(1:slab%nmus_photosphere),&
-      !    slab%weights(1:slab%nmus_photosphere),slab%nmus_photosphere)
-
-      ! Set weights and mus for the rest of angles
-      !call gauleg(-1.d0,illumination_cone_cosine,slab%mus(slab%nmus_photosphere+1:slab%nmus),&
-      !    slab%weights(slab%nmus_photosphere+1:slab%nmus),slab%nmus_nophotosphere)
 
       ! Create arrays for the current and the previous radiation field
       ! parameters, $\bar{n}$ and $\omega$, ...
-      allocate( slab%nbar(      slab%nshells, atom%ntran ) )
-      allocate( slab%omega(     slab%nshells, atom%ntran ) )
-      allocate( slab%nbar_old(  slab%nshells, atom%ntran ) )
-      allocate( slab%omega_old( slab%nshells, atom%ntran ) )
+      allocate( slab%nbar(      slab%n_layers, atom%ntran ) )
+      allocate( slab%omega(     slab%n_layers, atom%ntran ) )
+      allocate( slab%nbar_old(  slab%n_layers, atom%ntran ) )
+      allocate( slab%omega_old( slab%n_layers, atom%ntran ) )
 
       ! ...and initialize the current nbar and omega in all layers with the same
       ! values using Allen's tables to start iterating.
@@ -98,12 +86,17 @@ contains
       stop
 
 
-      allocate(slab%emission_vector(4,slab%nshells,in_fixed%no))
-      allocate(slab%propagation_matrix(4,4,slab%nshells,in_fixed%no))
+      allocate(slab%emission_vector(4,slab%n_layers,in_fixed%no))
+      allocate(slab%propagation_matrix(4,4,slab%n_layers,in_fixed%no))
 
-      allocate(slab%tau(slab%nshells,in_fixed%no))
+      allocate(slab%tau(slab%n_layers,in_fixed%no))
 
       allocate(prof(in_fixed%no))
+
+      allocate(J00_nu(slab%n_layers,in_fixed%no))
+      allocate(J20_nu(slab%n_layers,in_fixed%no))
+      allocate(J00(slab%n_layers))
+      allocate(J20(slab%n_layers))
 
       relative_change = 100.d0
 
@@ -115,7 +108,7 @@ contains
         
         do while (loop_iteration < 50 .and. relative_change(1) > 1d-3 .and. relative_change(2) > 1d-3)
 
-            do loop_shell = 1, slab%nshells
+            do loop_shell = 1, slab%n_layers
 
                 ! To fill and solve the statistical equilibrium equations,
                 ! restore  the magnetic field vector in the current slab and...
@@ -247,7 +240,7 @@ contains
             enddo
 
 ! Carry out the integration over frequency weighted by the line profile                
-            do i = 1, slab%nshells
+            do i = 1, slab%n_layers
                 J00(i) = J00(i) + int_tabulated(in_observation%freq, J00_nu(i,:)*prof)
                 J20(i) = J20(i) + int_tabulated(in_observation%freq, J20_nu(i,:)*prof)
             enddo
@@ -281,7 +274,7 @@ contains
 ! Recompute the propagation matrix and emission vector for the last time
 ! for the synthesis of the Stokes profiles
 
-        do loop_shell = 1, slab%nshells
+        do loop_shell = 1, slab%n_layers
 
             ! For the final formal solution, take the LoS projection of the
             ! vertical velocity in the current slab.  Hazel has a stupid
@@ -404,8 +397,8 @@ contains
         call synthesize_stokes(slab, in_params, in_fixed, output)
 
         open(unit=18,file='Jbar_tensors.dat',action='write',status='replace')
-        write(18,*) slab%nshells
-        do i = 1, slab%nshells
+        write(18,*) slab%n_layers
+        do i = 1, slab%n_layers
             write(18,*) maxval(slab%tau(i,:)), slab%nbar(i,1), slab%omega(i,1)
             !+DEBUG
             write (*, *) 'max tau, nbar, omega: ', maxval( slab%tau(i,:) ), slab%nbar(i,1), slab%omega(i,1)
@@ -437,7 +430,7 @@ contains
     real(kind=8), allocatable :: ab_matrix(:,:,:), source_vector(:,:)
     real(kind=8) :: sm(4), s0(4), sp(4), mat1(4,4), mat2(4,4), mat3(4,4)
     
-        n = slab%nshells
+        n = slab%n_layers
         !nmus = slab%nmus
         nmus = slab%aq_size
         
@@ -567,7 +560,7 @@ contains
     real(kind=8), allocatable :: ab_matrix(:,:,:), source_vector(:,:), total_tau(:)
     real(kind=8) :: sm(4), s0(4), sp(4), mat1(4,4), mat2(4,4), mat3(4,4), Ic
     
-        n = slab%nshells
+        n = slab%n_layers
         !nmus = slab%nmus
         
         allocate(ab_matrix(4,4,n))

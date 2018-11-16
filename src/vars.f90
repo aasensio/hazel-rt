@@ -82,7 +82,7 @@ implicit none
 	end type type_inversion
 
 	type type_slab
-		integer :: nshells, aq_size
+		integer :: n_layers, aq_size
 		real(kind=8), pointer :: nbar(:,:), omega(:,:), Lambda(:), tau(:,:)
 		real(kind=8), pointer :: boundary(:,:,:), nbar_old(:,:), omega_old(:,:)
 		real(kind=8), pointer :: emission_vector(:,:,:)

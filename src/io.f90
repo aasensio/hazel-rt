@@ -589,24 +589,24 @@ contains
 
     ! Read the number of shells in the cake model...
     call lb(12, 2)
-    read(12, *) slab%nshells
+    read(12, *) slab%n_layers
     if ( verbose_mode == 1 ) then
-      print *, 'Number of shells = ', slab%nshells
+      print *, 'Number of shells = ', slab%n_layers
     endif
 
     ! ...create eight tables for slab properties...
-    allocate( slab%z(        slab%nshells ) )
-    allocate( slab%density(  slab%nshells ) )
-    allocate( slab%v_z(      slab%nshells ) )
-    allocate( slab%B(        slab%nshells ) )
-    allocate( slab%thB(      slab%nshells ) )
-    allocate( slab%chiB(     slab%nshells ) )
-    allocate( slab%damping(  slab%nshells ) )
-    allocate( slab%vthermal( slab%nshells ) )
+    allocate( slab%z(        slab%n_layers ) )
+    allocate( slab%density(  slab%n_layers ) )
+    allocate( slab%v_z(      slab%n_layers ) )
+    allocate( slab%B(        slab%n_layers ) )
+    allocate( slab%thB(      slab%n_layers ) )
+    allocate( slab%chiB(     slab%n_layers ) )
+    allocate( slab%damping(  slab%n_layers ) )
+    allocate( slab%vthermal( slab%n_layers ) )
 
     ! ...and read them all.
     call lb(12, 3)
-    do i = 1, slab%nshells
+    do i = 1, slab%n_layers
       read(12, *) slab%z(i), slab%density(i), slab%v_z(i), slab%B(i), slab%thB(i), slab%chiB(i), slab%damping(i), slab%vthermal(i)
       ! Convert heights from km to cm.  Both velocities are converted inside rt_coef from km/s to cm/s.
       slab%z(i) = slab%z(i) * 1.d5
