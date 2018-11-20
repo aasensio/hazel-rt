@@ -114,9 +114,10 @@ contains
 			in_observation%freq = -PC / (in_fixed%wl*1.d-8)**2 * (in_observation%wl*1.d-8)
 		endif
 #else
-		onum = -1.d8 * in_observation%wl / in_fixed%wl**2
+    onum = -1.d8 * in_observation%wl / in_fixed%wl**2
 #endif
 
+stop
 ! In the inversion mode, use the wavelength axis (wavenumber in this case) from the observation
 		if (working_mode == 1) then
 			onum = -1.d8 * in_observation%wl / in_fixed%wl**2

@@ -17,19 +17,21 @@ contains
     real(kind=8) :: output(0:3,in_fixed%no)
     integer :: i, loop_iteration, loop_shell, error, j
     real(kind=8) :: I0, Q0, U0, V0, ds, Imax, Ic, factor, eta0, psim, psi0
-    real(kind=8) :: dnum, relative_change(2), vmacro
+    real(kind=8) :: relative_change(2), vmacro
     real(kind=8), allocatable, dimension(:) :: epsI, epsQ, epsU, epsV, etaI, etaQ, etaU, etaV, dtau
     real(kind=8), allocatable, dimension(:) :: rhoQ, rhoU, rhoV, delta, prof(:)
     real(kind=8), allocatable :: StokesM(:), kappa_prime(:,:), kappa_star(:,:), identity(:,:)
     real(kind=8), allocatable :: source(:), m1(:,:), m2(:,:), Stokes0(:)
     real(kind=8), allocatable :: O_evol(:,:), psi_matrix(:,:), J00(:), J20(:), J00_nu(:,:), J20_nu(:,:)
 
-    integer(kind=4) :: line, layer, angle
-    real(kind=8) :: mu, illumination_cone_cosine, illumination_cone_sine, cos_alpha
+    integer(kind=4) :: line, layer, angle, spectrum_size, begin_ind, end_ind
+    real(kind=8) :: mu, illumination_cone_cosine, illumination_cone_sine, cos_alpha, wavelength, v_los, d_nu_dopp
 
       if ( verbose_mode == 1 ) then
           print *, 'Starting transfer...'
       endif
+
+      spectrum_size = multiplets( atom%ntran )%end
 
       ! Create arrays for the current and the previous radiation field
       ! parameters, $\bar{n}$ and $\omega$, ...
@@ -44,10 +46,11 @@ contains
           write (*, '(a)') 'Initial nbar and omega:'
       endif
       do line = 1, atom%ntran
-        slab%nbar(  :, line ) = nbar_allen(  atom%wavelength( line ), in_fixed, in_params, atom%reduction_factor(       line ) )
-        slab%omega( :, line ) = omega_allen( atom%wavelength( line ), in_fixed, in_params, atom%reduction_factor_omega( line ) )
+        wavelength = atom%wavelength( line )
+        slab%nbar(  :, line ) = nbar_allen(  wavelength, in_fixed, in_params, atom%reduction_factor(       line ) )
+        slab%omega( :, line ) = omega_allen( wavelength, in_fixed, in_params, atom%reduction_factor_omega( line ) )
         if ( verbose_mode == 1 ) then
-            write (*, '(4x, a, f9.3, a, e8.2, a, e8.2)') 'wavelength = ', atom%wavelength( line ), ' A, nbar = ', slab%nbar( 1, line ), ', omega = ', slab%omega( 1, line )
+            write (*, '(4x, a, f9.3, a, e8.2, a, e8.2)') 'wavelength = ', wavelength, ' A, nbar = ', slab%nbar( 1, line ), ', omega = ', slab%omega( 1, line )
         endif
       enddo
       ! Set the previous values to the current ones.
@@ -55,12 +58,15 @@ contains
       slab%omega_old = slab%omega
 
       ! Create an array for the boundary conditions...
-      allocate( slab%boundary( 4, slab%aq_size, in_fixed%no ), source = 0d0 )
+      allocate( slab%boundary( 4, spectrum_size, slab%aq_size ), source = 0d0 )
 
-      ! The illumination cone for a given height has
+      ! From Eq. (12.32) of Landi degl'Innocenti & Landolfi (2004) obtain
+      ! properties of the illumination cone for the given height...
       illumination_cone_sine   = RSUN / ( RSUN + in_params%height )
       illumination_cone_cosine = sqrt( 1d0 - illumination_cone_sine**2 )
-      ! from Eq. (12.32) of Landi degl'Innocenti & Landolfi (2004).
+      if ( verbose_mode == 1 ) then
+          write (*, '(a, f5.2)') 'Illumination cone mu = ', illumination_cone_cosine
+      endif
 
       ! ...and use Allen's tables for the center-to-limb variation of the
       ! continuum intensity to set all Stokes I values for the current angle.
@@ -73,30 +79,50 @@ contains
         if ( mu > illumination_cone_cosine ) then
           ! Eq. 12.33 of Landi degl'Innocenti & Landolfi (2004).
           cos_alpha = sqrt( mu**2 - illumination_cone_cosine**2 ) / illumination_cone_sine
-          slab%boundary( 1, angle, : ) = I0_allen( in_fixed%wl, cos_alpha )
+          do line = 1, atom%ntran
+            wavelength = multiplets( line )%wl
+            begin_ind  = multiplets( line )%begin
+            end_ind    = multiplets( line )%end
+            slab%boundary( 1, begin_ind:end_ind, angle ) = I0_allen( wavelength, cos_alpha )
+          enddo
         else
           ! For other angles there is no incoming boundary intensity and it is
           ! already set to zero.
           continue
         endif
         if ( verbose_mode == 1 ) then
-          write (*, '(4x, a, f6.3, a, e8.2)') 'mu = ', mu, ', I0 = ', slab%boundary( 1, angle, 1 )
+          write (*, '(4x, a, f6.3, a, *(e9.2, x))') 'mu = ', mu, ', I0 = ', slab%boundary( 1, multiplets%begin, angle )
         endif
       enddo
+
+      allocate( slab%propagation_matrix( 4, 4, slab%n_layers, spectrum_size, slab%aq_size ), source = 0d0 )
+      allocate( slab%emission_vector(       4, slab%n_layers, spectrum_size, slab%aq_size ), source = 0d0 )
+
+      ! Generate the absorption profile.
+      allocate( slab%absorption_profile( slab%n_layers, spectrum_size, slab%aq_size ), source = 0d0 )
+      call calc_rt_coef( in_params, in_fixed, in_observation, 1 )
+      stop
+
+      do angle = 1, slab%aq_size
+        do layer = 1, slab%n_layers
+          ! The LoS velocity is the projection of v_z along the angle direction.
+          v_los = slab%v_z( layer ) * cos( slab%aq_inclination( angle ) )
+          ! The Doppler width in Hz.
+          d_nu_dopp = in_params%vdopp*1.d5 / ( in_fixed%wl * 1.d-8 )
+          prof = profile( in_params%damping, in_observation%freq / d_nu_dopp ) / ( d_nu_dopp * SQRTPI )
+        enddo
+      enddo
+      !allocate(slab%tau(slab%n_layers,in_fixed%no))
+      !allocate(prof(in_fixed%no))
+
+      !allocate(J00_nu(slab%n_layers,in_fixed%no))
+      !allocate(J20_nu(slab%n_layers,in_fixed%no))
+      !allocate(J00(slab%n_layers))
+      !allocate(J20(slab%n_layers))
+
       stop
 
 
-      allocate(slab%emission_vector(4,slab%n_layers,in_fixed%no))
-      allocate(slab%propagation_matrix(4,4,slab%n_layers,in_fixed%no))
-
-      allocate(slab%tau(slab%n_layers,in_fixed%no))
-
-      allocate(prof(in_fixed%no))
-
-      allocate(J00_nu(slab%n_layers,in_fixed%no))
-      allocate(J20_nu(slab%n_layers,in_fixed%no))
-      allocate(J00(slab%n_layers))
-      allocate(J20(slab%n_layers))
 
       relative_change = 100.d0
 
@@ -206,22 +232,22 @@ contains
                 endif
 
 ! Set emission vector at this shell
-                slab%emission_vector(1,loop_shell,:) = epsI
-                slab%emission_vector(2,loop_shell,:) = epsQ
-                slab%emission_vector(3,loop_shell,:) = epsU
-                slab%emission_vector(4,loop_shell,:) = epsV
+                slab%emission_vector(1,loop_shell,:, angle) = epsI
+                slab%emission_vector(2,loop_shell,:, angle) = epsQ
+                slab%emission_vector(3,loop_shell,:, angle) = epsU
+                slab%emission_vector(4,loop_shell,:, angle) = epsV
 
 ! Set propagation matrix at this shell
                 do i = 1, in_fixed%no
-                    call fill_absorption_matrix(slab%propagation_matrix(:,:,loop_shell,i),&
+                    call fill_absorption_matrix( slab%propagation_matrix( :, :, loop_shell, i, angle ), &
                         etaI(i),etaQ(i),etaU(i),etaV(i),rhoQ(i),rhoU(i),rhoV(i))
                 enddo
 
 ! Multiply by the density
-                slab%propagation_matrix(:,:,loop_shell,:) = slab%propagation_matrix(:,:,loop_shell,:) * &
+                slab%propagation_matrix( :, :, loop_shell, :, angle ) = slab%propagation_matrix( :, :, loop_shell, :, angle ) * &
                     slab%density(loop_shell)
-                slab%emission_vector(:,loop_shell,:) = slab%emission_vector(:,loop_shell,:) * &
-                    slab%density(loop_shell)
+                slab%emission_vector( :, loop_shell, :, angle ) = slab%emission_vector( :, loop_shell, :, angle ) * &
+                    slab%density( loop_shell )
 
             enddo
 
@@ -231,8 +257,8 @@ contains
             J20_nu = 0.d0
 
 ! Generate line profile
-            dnum = in_params%vdopp*1.d5 / (in_fixed%wl*1.d-8)
-            prof = profile(in_params%damping,in_observation%freq / dnum) / (dnum*SQRTPI)
+            d_nu_dopp = in_params%vdopp*1.d5 / (in_fixed%wl*1.d-8)
+            prof = profile(in_params%damping,in_observation%freq / d_nu_dopp) / (d_nu_dopp*SQRTPI)
 
 ! Solve the RT equation and calculate the tensors J00 and J20
             do i = 1, in_fixed%no
@@ -375,21 +401,21 @@ contains
             endif
 
 ! Set emission vector at this shell
-            slab%emission_vector(1,loop_shell,:) = epsI
-            slab%emission_vector(2,loop_shell,:) = epsQ
-            slab%emission_vector(3,loop_shell,:) = epsU
-            slab%emission_vector(4,loop_shell,:) = epsV
+            slab%emission_vector(1,loop_shell,:, angle) = epsI
+            slab%emission_vector(2,loop_shell,:, angle) = epsQ
+            slab%emission_vector(3,loop_shell,:, angle) = epsU
+            slab%emission_vector(4,loop_shell,:, angle) = epsV
 
 ! Set propagation matrix at this shell
             do i = 1, in_fixed%no
-                call fill_absorption_matrix(slab%propagation_matrix(:,:,loop_shell,i),&
+                call fill_absorption_matrix(slab%propagation_matrix(:,:,loop_shell,i, angle),&
                     etaI(i),etaQ(i),etaU(i),etaV(i),rhoQ(i),rhoU(i),rhoV(i))
             enddo
 
 ! Multiply by the density
-            slab%propagation_matrix(:,:,loop_shell,:) = slab%propagation_matrix(:,:,loop_shell,:) * &
+            slab%propagation_matrix(:,:,loop_shell,:, angle) = slab%propagation_matrix(:,:,loop_shell,:, angle) * &
                 slab%density(loop_shell)
-            slab%emission_vector(:,loop_shell,:) = slab%emission_vector(:,loop_shell,:) * &
+            slab%emission_vector(:,loop_shell,:, angle) = slab%emission_vector(:,loop_shell,:,angle) * &
                 slab%density(loop_shell)
 
         enddo
@@ -426,7 +452,7 @@ contains
     real(kind=8) :: chim, chi0, chip, dtp, dtm, exu
     real(kind=8) :: psim, psi0, psip, psim_lin, psi0_lin, dm, dp, mu, Qtilde
     
-    integer :: i, j, n, nmus, kfrom, kto, kstep
+    integer :: i, j, n, nmus, kfrom, kto, kstep, dummy
     real(kind=8), allocatable :: ab_matrix(:,:,:), source_vector(:,:)
     real(kind=8) :: sm(4), s0(4), sp(4), mat1(4,4), mat2(4,4), mat3(4,4)
     
@@ -440,10 +466,10 @@ contains
 ! Transform K into K* and then into K'
         do i = 1, 4
             do j = 1, 4
-                ab_matrix(i,j,:) = slab%propagation_matrix(i,j,:,freq) / slab%propagation_matrix(1,1,:,freq)
+                ab_matrix(i,j,:) = slab%propagation_matrix( i, j, :, freq, dummy ) / slab%propagation_matrix( 1, 1, :, freq, dummy )
             enddo
-            ab_matrix(i,i,:) = ab_matrix(i,i,:) - 1.d0
-            source_vector(i,:) = slab%emission_vector(i,:,freq) / slab%propagation_matrix(1,1,:,freq)
+            ab_matrix( i, i, : ) = ab_matrix( i, i, : ) - 1.d0
+            source_vector(i,:) = slab%emission_vector( i, :, freq, dummy ) / slab%propagation_matrix(1,1,:,freq, dummy)
         enddo
 
         J00 = 0.d0
@@ -483,9 +509,9 @@ contains
                 if (k /= kto) then
                     km = k - 1
                     kp = k + 1
-                    chim = slab%propagation_matrix(1,1,km,freq)                    
-                    chi0 = slab%propagation_matrix(1,1,k,freq)                    
-                    chip = slab%propagation_matrix(1,1,kp,freq)                    
+                    chim = slab%propagation_matrix(1,1,km,freq, dummy)                    
+                    chi0 = slab%propagation_matrix(1,1,k,freq, dummy)                    
+                    chip = slab%propagation_matrix(1,1,kp,freq, dummy)                    
                     sm = source_vector(:,km)
                     s0 = source_vector(:,k)
                     sp = source_vector(:,kp)
@@ -494,8 +520,8 @@ contains
                 else
 ! Linear short-characteristics            
                     km = k - 1
-                    chim = slab%propagation_matrix(1,1,km,freq)
-                    chi0 = slab%propagation_matrix(1,1,k,freq)
+                    chim = slab%propagation_matrix(1,1,km,freq, dummy)
+                    chi0 = slab%propagation_matrix(1,1,k,freq, dummy)
                     chip = 0.d0
                     sm = source_vector(:,km)
                     s0 = source_vector(:,k)
@@ -556,7 +582,7 @@ contains
     real(kind=8) :: chim, chi0, chip, dtp, dtm, exu
     real(kind=8) :: psim, psi0, psip, psim_lin, psi0_lin, dm, dp, mu
     
-    integer :: i, j, n, nmus, kfrom, kto, kstep
+    integer :: i, j, n, nmus, kfrom, kto, kstep, dummy
     real(kind=8), allocatable :: ab_matrix(:,:,:), source_vector(:,:), total_tau(:)
     real(kind=8) :: sm(4), s0(4), sp(4), mat1(4,4), mat2(4,4), mat3(4,4), Ic
     
@@ -575,10 +601,10 @@ contains
 ! Transform K into K* and then into K'
             do i = 1, 4
                 do j = 1, 4
-                    ab_matrix(i,j,:) = slab%propagation_matrix(i,j,:,freq) / slab%propagation_matrix(1,1,:,freq)
+                    ab_matrix(i,j,:) = slab%propagation_matrix(i,j,:,freq, dummy) / slab%propagation_matrix(1,1,:,freq, dummy)
                 enddo
                 ab_matrix(i,i,:) = ab_matrix(i,i,:) - 1.d0
-                source_vector(i,:) = slab%emission_vector(i,:,freq) / slab%propagation_matrix(1,1,:,freq)
+                source_vector(i,:) = slab%emission_vector(i,:,freq, dummy) / slab%propagation_matrix(1,1,:,freq, dummy)
             enddo
 
             ! The mu direction cosine points to the observer at (thetad, chid, gammad).
@@ -601,9 +627,9 @@ contains
                 if (k /= kto) then
                     km = k - 1
                     kp = k + 1
-                    chim = slab%propagation_matrix(1,1,km,freq)
-                    chi0 = slab%propagation_matrix(1,1,k,freq)                    
-                    chip = slab%propagation_matrix(1,1,kp,freq)                    
+                    chim = slab%propagation_matrix(1,1,km,freq, dummy)
+                    chi0 = slab%propagation_matrix(1,1,k,freq, dummy)                    
+                    chip = slab%propagation_matrix(1,1,kp,freq, dummy)                    
                     sm = source_vector(:,km)
                     s0 = source_vector(:,k)
                     sp = source_vector(:,kp)
@@ -612,8 +638,8 @@ contains
                 else
 ! Linear short-characteristics            
                     km = k - 1
-                    chim = slab%propagation_matrix(1,1,km,freq)
-                    chi0 = slab%propagation_matrix(1,1,k,freq)
+                    chim = slab%propagation_matrix(1,1,km,freq, dummy)
+                    chi0 = slab%propagation_matrix(1,1,k,freq, dummy)
                     chip = 0.d0
                     sm = source_vector(:,km)
                     s0 = source_vector(:,k)

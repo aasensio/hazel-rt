@@ -632,7 +632,6 @@ contains
     enddo
 
     close(12)
-    stop
   end subroutine read_slab
 
 !------------------------------------------------------------

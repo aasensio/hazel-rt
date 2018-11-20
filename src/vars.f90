@@ -84,11 +84,14 @@ implicit none
 	type type_slab
 		integer :: n_layers, aq_size
 		real(kind=8), pointer :: nbar(:,:), omega(:,:), Lambda(:), tau(:,:)
-		real(kind=8), pointer :: boundary(:,:,:), nbar_old(:,:), omega_old(:,:)
-		real(kind=8), pointer :: emission_vector(:,:,:)
-		real(kind=8), pointer :: propagation_matrix(:,:,:,:)
+		real(kind=8), pointer :: nbar_old(:,:), omega_old(:,:)
     real(kind=8), pointer :: z(:), density(:), v_z(:), B(:), thB(:), chiB(:), damping(:), vthermal(:)
     real(kind=8), pointer :: aq_azimuth(:), aq_inclination(:), aq_weight(:)
+		real(kind=8), pointer :: &
+      propagation_matrix(:, :, :, :, :), &
+      emission_vector(:, :, :, :), &
+      boundary(:, :, :), &
+      absorption_profile(:, :, :)
 	end type type_slab
 
 	type atom_model
