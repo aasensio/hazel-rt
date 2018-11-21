@@ -111,7 +111,7 @@ contains
 
 ! If the solution of the SEE gives an error, return
         if (error == 1) return
-                
+
 ! Calculate the absorption/emission coefficients for a given transition
         call calc_rt_coef(in_params, in_fixed, in_observation, 1)
                         
@@ -188,7 +188,7 @@ contains
 
 ! If synthesizing, calculate it because the step is constant
                 if (working_mode == 0) then
-                    wstep = (in_fixed%omax - in_fixed%omin) / in_fixed%no
+                    wstep = (in_fixed%d_wl_max - in_fixed%d_wl_min) / in_fixed%no
                 endif
                 
                 sh = sh / wstep
@@ -531,7 +531,7 @@ contains
 
 ! If synthesizing, calculate it because the step is constant
                 if (working_mode == 0) then
-                    wstep = (in_fixed%omax - in_fixed%omin) / in_fixed%no
+                    wstep = (in_fixed%d_wl_max - in_fixed%d_wl_min) / in_fixed%no
                 endif
                 
                 sh = sh / wstep
@@ -750,7 +750,7 @@ contains
                 sh = in_fixed%wl * (in_params%vmacro2 - in_params%vmacro) * 1.d5 / PC
 
 ! Then calculate the number of "pixels" to carry out the correct Doppler shift
-                wstep = (in_fixed%omax - in_fixed%omin) / in_fixed%no
+                wstep = (in_fixed%d_wl_max - in_fixed%d_wl_min) / in_fixed%no
                 sh = sh / wstep
                 
                 epsI = in_params%dtau * epsI + in_params%dtau2 * fft_shift(epsI, sh)
@@ -785,7 +785,7 @@ contains
 
 ! If synthesizing, calculate it because the step is constant
                 if (working_mode == 0) then
-                    wstep = (in_fixed%omax - in_fixed%omin) / in_fixed%no
+                    wstep = (in_fixed%d_wl_max - in_fixed%d_wl_min) / in_fixed%no
                 endif
                 
                 sh = sh / wstep
@@ -994,7 +994,7 @@ contains
 
 ! If synthesizing, calculate it because the step is constant
                 if (working_mode == 0) then
-                    wstep = (in_fixed%omax - in_fixed%omin) / in_fixed%no
+                    wstep = (in_fixed%d_wl_max - in_fixed%d_wl_min) / in_fixed%no
                 endif
                 
                 sh = sh / wstep

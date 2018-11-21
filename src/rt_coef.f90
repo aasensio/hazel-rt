@@ -14,10 +14,10 @@ contains
 	integer :: k, q, p, j, component
 	real(kind=8) :: theta, chi, gamma, sign
 	complex(kind=8) :: tr(0:2,-2:2,0:3), trp(0:2,-2:2,0:3), ii, suma
-	real(kind=8) :: onum0, dnum, dnum_freq, adamp, reduc(0:2,-2:2,-2:2)
+	real(kind=8) :: reduc(0:2,-2:2,-2:2)
 	integer, allocatable :: njlevu(:), njlevl(:)
 	real(kind=8), allocatable :: autl(:,:), autu(:,:), cl(:,:,:), cu(:,:,:), e0(:)
-	real(kind=8), allocatable :: tmp1(:), tmp2(:), onum(:)
+	real(kind=8), allocatable :: tmp1(:), tmp2(:)
 	integer :: nl, nu, ll2, lu2, jminl2, jmaxl2, jminu2, jmaxu2, j2, j2max, njlargest
 	integer :: kmax, qmax, i, jp2, kmin, qp
 	complex(kind=8), allocatable :: rot_mat_vert_mag(:,:,:), prof(:)
@@ -28,14 +28,16 @@ contains
 	
 	integer :: values_start(8), values_end(8)
 	real(kind=8) :: start_time, end_time
-	
-	
-		ii = cmplx(0.d0,1.d0)
-		
-      theta = in_fixed%thetad * PI/180.d0
-      chi = in_fixed%chid * PI/180.d0
-      gamma = in_fixed%gammad * PI/180.d0
-		
+  real(kind=8) :: d_nu_dopp, adamp, red_freq_0, red_freq_a
+  real(kind=8), allocatable :: red_freqs(:)
+  integer(kind=4) :: i_nu
+
+    ii = cmplx(0.d0,1.d0)
+
+    theta = in_fixed%thetad * PI / 180.d0
+    chi   = in_fixed%chid   * PI / 180.d0
+    gamma = in_fixed%gammad * PI / 180.d0
+
 ! The emission and absorption formulae are given in the magnetic reference frame. Therefore, we need the rho^K_Q
 ! calculated in this reference frame. The T^K_Q(i,Omega) tensor thus gives us the emission and absorption coefficient
 ! when observing at a given direction Omega with respect with the magnetic field reference frame. Then, it is composed
@@ -101,54 +103,60 @@ contains
 		mag_opt_stim = 0.d0
 		mag_opt_zeeman = 0.d0
 		mag_opt_stim_zeeman = 0.d0
-		if (.not.allocated(onum)) allocate(onum(in_fixed%no))
-		
-		
-! In the synthesis mode, generate a new wavelength axis (wavenumber in this case)
-#if ! defined(python)
-		if (working_mode == 0 .or. working_mode == -1) then		
-			do i = 1, in_fixed%no
-				onum(i) = in_fixed%omin + (in_fixed%omax-in_fixed%omin) * dfloat(i-1) / dfloat(in_fixed%no-1)
-			enddo			
-			in_observation%wl = -1.d-8 * in_fixed%wl**2 * onum
-			in_observation%freq = -PC / (in_fixed%wl*1.d-8)**2 * (in_observation%wl*1.d-8)
-		endif
-#else
-    onum = -1.d8 * in_observation%wl / in_fixed%wl**2
-#endif
 
-stop
-! In the inversion mode, use the wavelength axis (wavenumber in this case) from the observation
-		if (working_mode == 1) then
-			onum = -1.d8 * in_observation%wl / in_fixed%wl**2
-		endif
-				
-! Transform the Doppler velocity in wavenumber and we calculate the reduced damping constant
+    ! Get the Doppler width in Hz using Eq. (5.43) from the Book:
+    ! \[
+    !  \Delta\nu_D
+    !   = \dfrac{ v_{th} }{ c } \nu_0
+    !   = \dfrac{ v_{th} }{ \lambda_0 }.
+    ! \]
+    ! And which component are we computing?
+    d_nu_dopp = merge( in_params%vdopp, in_params%vdopp2, component == 1 ) * 1d5 / ( in_fixed%wl * 1d-8 )
 
-! Which component we are computing
-		if (component == 1) then
-			dnum = in_params%vdopp*1.d5 / (in_fixed%wl*1.d-8*PC)		! Delta w = v_th / (lambda*c) (from eqs. 5.43 of the book)
-		else
-			dnum = in_params%vdopp2*1.d5 / (in_fixed%wl*1.d-8*PC)		! Delta w = v_th / (lambda*c) (from eqs. 5.43 of the book)
-		endif
+    ! Set the damping parameter.
+    if ( in_fixed%damping_treatment == 1 ) then
+      ! To evaluate the damping parameter using the natural broadening, use the
+      ! following equations from Gray's "The Observation and Analysis of Stellar
+      ! photospheres".  The natural damping constant is given by
+      ! \[
+      !   \gamma = 4\pi \sum_{l < u} A_{ul},                  (11.15, Gray 2005)
+      ! \]
+      ! and the damping parameter is
+      ! \[
+      !   a = \dfrac{ \gamma }{ 4\pi } \dfrac{ 1 }{ \Delta\nu_D }
+      !     = \dfrac{ \sum_{l < u} A_{ul} }{ \Delta\nu_D }    (11.47, Gray 2005)
+      ! \]
+      ! The absolute value of the (negative) damping parameter serves as an
+      ! enhancement factor.
+      adamp = abs( in_params%damping ) * aesto( in_fixed%nemiss ) / d_nu_dopp
+    else
+      adamp = in_params%damping
+    endif
 
-		dnum_freq = dnum * PC
-		
-		adamp = in_params%damping
+    ! Set the reduced frequency grid for the current multiplet.
+    if ( .not.allocated( red_freqs ) ) allocate( red_freqs( in_fixed%no ), source = 0d0 )
+    ! Irregardles of the working mode, we always take the wavelength grid from
+    ! in_observation%wl array.
+    if ( abs( working_mode ) == 1 ) then
+      ! In the inversion (1) working mode, this grid comes from observations.
+      ! In the non-linear (-1) working mode, the grid is taken from the
+      ! corresponding multiplet grid in do_transfer().
+      continue
+    else ! working_mode == 0 or else.
+      ! In the synthesis working mode (0), the in_observation%wl array is
+      ! allocated but not set so you must generate an equidistant grid here
+      ! explicitly from in_fixed% parameters.
+      in_observation%wl = [ ( i_nu, i_nu = 0, in_fixed%no - 1 ) ] * ( ( in_fixed%d_wl_max - in_fixed%d_wl_min ) / dfloat( in_fixed%no - 1 ) ) + in_fixed%d_wl_min
+    endif
+    red_freqs = ( 1d0 / d_nu_dopp ) * ( -PC / 1d-8 / in_fixed%wl ) * ( in_observation%wl / ( in_observation%wl + in_fixed%wl ) )
+    !write(*, '(a, *(e9.2, x))') 'in_observation%wl = ', in_observation%wl
+    !write(*, '(a, *(e9.2, x))') 'red_freqs = ', red_freqs
 
-! If we compute the damping parameter using the natural broadening, use Eq. 11.47 and 11.15 of Grey "Stellar photospheres"
-! Modify the number with an enhancement given by the absolute value of the (negative) damping
-! The natural damping is given by gamma=4*pi*Aul and the damping constant is a=gamma / (4*pi) * lambda0^2/c * 1/dlambdad
-		if (in_fixed%damping_treatment == 1) then
-			adamp = in_fixed%wl * 1.d-8 / (in_params%vdopp*1.d5) * aesto(in_fixed%nemiss) * abs(in_params%damping)
-		endif
+    ! Express the LoS velocity in reduced frequency units.  See \( v_A \) in Eq.
+    ! (5.43) of the Book.  And choose which component we are considering.
+    red_freq_a = merge( in_params%vmacro / in_params%vdopp, in_params%vmacro2 / in_params%vdopp2, component == 1 )
+    !write(*, '(a, f8.3)') 'red_freq_a = ', red_freq_a
 
-		if (component == 1) then
-			va = in_params%vmacro * 1.d5 / (in_fixed%wl*1.d-8*PC)
-		else
-			va = in_params%vmacro2 * 1.d5 / (in_fixed%wl*1.d-8*PC)
-		endif
-				
 !-------------------------------------------------------------------------
 !----- We calculate eigenvalues and eigenvectors
 !-------------------------------------------------------------------------
@@ -421,9 +429,21 @@ stop
 										      		x6 = w6js(lu2,ll2,2,jlp2,jup2,is2)
 										      		do jsmalll = 1, njlevl(ml2)
 											      		do jsmallu = 1, njlevu(mu2)
-												      		onum0 = autu(mu2,jsmallu) - autl(ml2,jsmalll)
-! Evaluate the profile
-																prof = profile(adamp,(onum0-onum-va)/dnum) / (dnum_freq*SQRTPI)
+                                  ! The difference between autu and autl gives
+                                  ! the energy shift in cm^{-1}.  Convert it to
+                                  ! Hz (times c) and to reduced frequency units
+                                  ! (/ d_nu_dopp).
+                                  red_freq_0 = ( autu( mu2, jsmallu ) - autl( ml2, jsmalll ) ) * ( PC / d_nu_dopp )
+
+                                  ! Evaluate the normalized profile.  In hazel2
+                                  ! and old versions of the code there was no
+                                  ! normalization of the Voigt function to the
+                                  ! Hjerting function because the total
+                                  ! absorption was finally normalized to the
+                                  ! parametrized optical depth.  Here we need to
+                                  ! normalize the profile as the optical depth
+                                  ! is not provided.
+                                  prof = profile( adamp, red_freq_0 - red_freqs - red_freq_a ) / ( d_nu_dopp * SQRTPI )
 
 												      		x7=cl(ml2,jsmalll,jl2)*cl(ml2,jsmalll,jlp2)*&
 																	cu(mu2,jsmallu,ju2)*cu(mu2,jsmallu,jus2)
@@ -535,9 +555,11 @@ stop
 										      			x6 = w6js(lu2,ll2,2,jlp2,jup2,is2)
 										      			do jsmalll = 1, njlevl(ml2)
 											      			do jsmallu = 1, njlevu(mu2)
-												      			onum0 = autu(mu2,jsmallu) - autl(ml2,jsmalll)
-	! Evaluate the profile
-																	prof = profile(adamp,(onum0-onum-va)/dnum) / (dnum_freq*SQRTPI)
+                                    ! See the two comments above the same
+                                    ! expressions in the previous nested loops.
+                                    red_freq_0 = ( autu( mu2, jsmallu ) - autl( ml2, jsmalll ) ) * ( PC / d_nu_dopp )
+
+                                    prof = profile( adamp, red_freq_0 - red_freqs - red_freq_a ) / ( d_nu_dopp * SQRTPI )
 
 												      			x7=cl(ml2,jsmalll,jl2)*cl(ml2,jsmalll,jls2)*&
 																		cu(mu2,jsmallu,ju2)*cu(mu2,jsmallu,jup2)
@@ -679,7 +701,7 @@ stop
 !		deallocate(cl)
 !		deallocate(cu)
 !		deallocate(tmp)
-!		deallocate(onum)
+!		deallocate(red_freqs)
 !		deallocate(rot_mat_vert_mag)
 !		deallocate(prof)
 		

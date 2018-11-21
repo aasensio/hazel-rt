@@ -24,8 +24,8 @@ contains
     real(kind=8), allocatable :: source(:), m1(:,:), m2(:,:), Stokes0(:)
     real(kind=8), allocatable :: O_evol(:,:), psi_matrix(:,:), J00(:), J20(:), J00_nu(:,:), J20_nu(:,:)
 
-    integer(kind=4) :: line, layer, angle, spectrum_size, begin_ind, end_ind
-    real(kind=8) :: mu, illumination_cone_cosine, illumination_cone_sine, cos_alpha, wavelength, v_los, d_nu_dopp
+    integer(kind=4) :: line, layer, angle, spectrum_size, begin_ind, end_ind, n_points, i_nu
+    real(kind=8) :: mu, illumination_cone_cosine, illumination_cone_sine, cos_alpha, wavelength, v_los, d_nu_dopp, resolution
 
       if ( verbose_mode == 1 ) then
           print *, 'Starting transfer...'
@@ -33,12 +33,32 @@ contains
 
       spectrum_size = multiplets( atom%ntran )%end
 
+      ! Generate the frequency and wavelength grids for all multiplets.
+      do line = 1, atom%ntran
+        n_points   = multiplets( line )%no
+        resolution = ( multiplets( line )%d_wl_max - multiplets( line )%d_wl_min ) / dble( n_points - 1 )
+        wavelength = multiplets( line )%wl
+
+        allocate( multiplets( line )%lambdas(   n_points ), source = 0d0 )
+        allocate( multiplets( line )%nus(       n_points ), source = 0d0 )
+        allocate( multiplets( line )%d_lambdas( n_points ), source = 0d0 )
+        allocate( multiplets( line )%d_nus(     n_points ), source = 0d0 )
+
+        ! Set an equidistant wavelength grid.
+        multiplets( line )%d_lambdas( 1:n_points ) = [ (i_nu, i_nu = 0, n_points - 1) ] * resolution + multiplets( line )%d_wl_min
+        multiplets( line )%lambdas(   1:n_points ) = multiplets( line )%d_lambdas( 1:n_points ) + wavelength
+
+        ! Convert Ångströms to cm with a factor of 10^{-8} to get Hz.
+        multiplets( line )%nus( 1:n_points )   = ( PC / 1d-8 ) / multiplets( line )%lambdas( 1:n_points )
+        multiplets( line )%d_nus( 1:n_points ) = multiplets( line )%nus( 1:n_points ) - ( PC / 1d-8 / wavelength )
+      enddo
+
       ! Create arrays for the current and the previous radiation field
       ! parameters, $\bar{n}$ and $\omega$, ...
-      allocate( slab%nbar(      slab%n_layers, atom%ntran ) )
-      allocate( slab%omega(     slab%n_layers, atom%ntran ) )
-      allocate( slab%nbar_old(  slab%n_layers, atom%ntran ) )
-      allocate( slab%omega_old( slab%n_layers, atom%ntran ) )
+      allocate( slab%nbar(      slab%n_layers, atom%ntran ), source = 0d0 )
+      allocate( slab%omega(     slab%n_layers, atom%ntran ), source = 0d0 )
+      allocate( slab%nbar_old(  slab%n_layers, atom%ntran ), source = 0d0 )
+      allocate( slab%omega_old( slab%n_layers, atom%ntran ), source = 0d0 )
 
       ! ...and initialize the current nbar and omega in all layers with the same
       ! values using Allen's tables to start iterating.
@@ -47,10 +67,11 @@ contains
       endif
       do line = 1, atom%ntran
         wavelength = atom%wavelength( line )
+        ! Same value for different layers.
         slab%nbar(  :, line ) = nbar_allen(  wavelength, in_fixed, in_params, atom%reduction_factor(       line ) )
         slab%omega( :, line ) = omega_allen( wavelength, in_fixed, in_params, atom%reduction_factor_omega( line ) )
         if ( verbose_mode == 1 ) then
-            write (*, '(4x, a, f9.3, a, e8.2, a, e8.2)') 'wavelength = ', wavelength, ' A, nbar = ', slab%nbar( 1, line ), ', omega = ', slab%omega( 1, line )
+            write (*, '(4x, a, f9.3, 2(a, e8.2))') 'wavelength = ', wavelength, ' A, nbar = ', slab%nbar( 1, line ), ', omega = ', slab%omega( 1, line )
         endif
       enddo
       ! Set the previous values to the current ones.

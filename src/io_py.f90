@@ -155,11 +155,10 @@ contains
 		
 ! Wavelength axis
 		call lb(12,2)
-		read(12,*) in_fixed%omin, in_fixed%omax, in_fixed%no
+		read(12,*) in_fixed%d_wl_min, in_fixed%d_wl_max, in_fixed%no
 		if (verbose_mode == 1) then
 			print *, 'Wavelength axis'
-			write(*,FMT='(4X,A,F8.3,3X,A,F8.3,3X,A,I5)') 'Min : ', in_fixed%omin, 'Max : ', in_fixed%omax, 'N. steps : ', &
-				in_fixed%no
+			write(*, fmt='(4X,A,F8.3,3X,A,F8.3,3X,A,I5)') 'Min : ', in_fixed%d_wl_min, 'Max : ', in_fixed%d_wl_max, 'N. steps : ', in_fixed%no
 		endif
 		
 ! Line wavelength and Doppler width
@@ -693,7 +692,7 @@ contains
 		write(13,*)
 		
 		write(13,FMT='(A)') '# Wavelength axis: minimum, maximum and number of grid points'
-		write(13,*) in_fixed%omin, in_fixed%omax, in_fixed%no
+		write(13,*) in_fixed%d_wl_min, in_fixed%d_wl_max, in_fixed%no
 		write(13,FMT='(3(F7.2,2X))')
 
 		if (in_params%nslabs == 1 .or. in_params%nslabs == 2) then

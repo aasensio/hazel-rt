@@ -30,7 +30,7 @@ implicit none
 	real(kind=8), allocatable :: threej(:)
 	
 !	real(kind=8) :: bgauss, thetabd, chibd, thb, chb, thetad, chid, gammad
-!	real(kind=8) :: omin, omax, wl, vdopp
+!	real(kind=8) :: d_wl_min, d_wl_max, wl, vdopp
 !	integer :: nemiss, no
 	
 	real(kind=8) :: dr(-1:1,-1:1), di(-1:1,-1:1)
@@ -52,7 +52,7 @@ implicit none
 	end type variable_parameters
 	
 	type fixed_parameters
-		real(kind=8) :: thetad, chid, gammad, omin, omax, wl
+		real(kind=8) :: thetad, chid, gammad, d_wl_min, d_wl_max, wl
 		real(kind=8) :: Stokes_incident(0:3), Aul, Bul, Blu, nu
 		integer :: no, nemiss, use_atomic_pol, total_forward_modeling
 		integer :: pix_syn_id, col_syn_id, nlambda_syn_id, lambda_syn_id, map_syn_id, syn_id
@@ -101,8 +101,13 @@ implicit none
 	end type atom_model
 
   type multiplet
-    real(kind=8) :: wl, omin, omax
+    real(kind=8) :: wl, d_wl_min, d_wl_max
     integer(kind=4) :: no, begin, end
+    real(kind=8), pointer :: &
+      lambdas(:),   & ! absolute wavelengths
+      d_lambdas(:), & ! wavelength shifts off the line center
+      nus(:),       & ! absolute frequencies
+      d_nus(:) ! frequency shifts off the line center
   end type multiplet
   type(multiplet), dimension(:), allocatable :: multiplets
 
