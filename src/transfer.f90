@@ -3,6 +3,7 @@ use vars
 use SEE
 use rt_coef
 use maths
+use ogpf
 implicit none
 contains
 
@@ -25,7 +26,10 @@ contains
     real(kind=8), allocatable :: O_evol(:,:), psi_matrix(:,:), J00(:), J20(:), J00_nu(:,:), J20_nu(:,:)
 
     integer(kind=4) :: line, layer, angle, spectrum_size, begin_ind, end_ind, n_points, i_nu
-    real(kind=8) :: mu, illumination_cone_cosine, illumination_cone_sine, cos_alpha, wavelength, v_los, d_nu_dopp, resolution
+    real(kind=8) :: mu, illumination_cone_cosine, illumination_cone_sine, cos_alpha, wavelength, v_los, d_nu_dopp, resolution, adamp
+
+    ! ogpf
+    type(gpf) :: gp
 
       if ( verbose_mode == 1 ) then
           print *, 'Starting transfer...'
@@ -95,7 +99,8 @@ contains
           write (*, '(a)') 'Boundary intensities:'
       endif
       do angle = 1, slab%aq_size
-        ! for all inclinations $\theta$ having $\mu = \cos\theta > \cos\gamma$
+        ! for all inclinations \( \theta \) having
+        ! \( \mu = \cos\theta > \cos\gamma \).
         mu = cos( slab%aq_inclination( angle ) )
         if ( mu > illumination_cone_cosine ) then
           ! Eq. 12.33 of Landi degl'Innocenti & Landolfi (2004).
@@ -116,23 +121,29 @@ contains
         endif
       enddo
 
-      allocate( slab%propagation_matrix( 4, 4, slab%n_layers, spectrum_size, slab%aq_size ), source = 0d0 )
-      allocate( slab%emission_vector(       4, slab%n_layers, spectrum_size, slab%aq_size ), source = 0d0 )
+      call gp%options('set style data linespoints; set grid')
+      call gp%plot( multiplets(1)%d_lambdas, slab%boundary( 1, 1:200, 1 ), 'lt 7' ) 
+      stop
 
       ! Generate the absorption profile.
       allocate( slab%absorption_profile( slab%n_layers, spectrum_size, slab%aq_size ), source = 0d0 )
-      call calc_rt_coef( in_params, in_fixed, in_observation, 1 )
-      stop
 
       do angle = 1, slab%aq_size
         do layer = 1, slab%n_layers
           ! The LoS velocity is the projection of v_z along the angle direction.
           v_los = slab%v_z( layer ) * cos( slab%aq_inclination( angle ) )
+          ! The damping parameter.
+          adamp = slab%damping( layer )
           ! The Doppler width in Hz.
           d_nu_dopp = in_params%vdopp*1.d5 / ( in_fixed%wl * 1.d-8 )
+          d_nu_dopp = slab%vthermal( layer ) * 1d5 / ( in_fixed%wl * 1d-8 )
           prof = profile( in_params%damping, in_observation%freq / d_nu_dopp ) / ( d_nu_dopp * SQRTPI )
         enddo
       enddo
+
+
+      allocate( slab%propagation_matrix( 4, 4, slab%n_layers, spectrum_size, slab%aq_size ), source = 0d0 )
+      allocate( slab%emission_vector(       4, slab%n_layers, spectrum_size, slab%aq_size ), source = 0d0 )
       !allocate(slab%tau(slab%n_layers,in_fixed%no))
       !allocate(prof(in_fixed%no))
 

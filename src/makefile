@@ -73,11 +73,11 @@ ifeq ($(version), serial)
 		COMPILER_OPTS = -c -O3 
 		PREPROCESS = -D$(version) -fpp
 	endif
-	HAZEL_DEP = hazel.f90 allen.o synth.o rt_coef.o SEE.o maths.o vars.o mpi_routines_fake.o inversion.o io.o transfer.o
+	HAZEL_DEP = hazel.f90 allen.o synth.o rt_coef.o SEE.o maths.o vars.o mpi_routines_fake.o inversion.o io.o transfer.o ogpf.o
 	HAZEL_MAIN_OBJ = hazel.o
 	HAZEL_MAIN_SRC = hazel.f90
 	OBJECTS = vars.o maths.o allen.o svd.o io.o SEE.o rt_coef.o synth.o marquardt.o hazel.o DIRect.o \
-		DIRserial.o DIRsubrout.o singleton.o mpi_routines_fake.o inversion.o transfer.o
+		DIRserial.o DIRsubrout.o singleton.o mpi_routines_fake.o inversion.o transfer.o ogpf.o
 endif
 
 ifeq ($(version), python)
@@ -128,7 +128,7 @@ maths.o: maths.f90 vars.o singleton.o
 allen.o: allen.f90 maths.o vars.o
 	$(COMPILER) $(COMPILER_OPTS)  allen.f90
 
-transfer.o: transfer.f90 rt_coef.o SEE.o vars.o maths.o
+transfer.o: transfer.f90 rt_coef.o SEE.o vars.o maths.o ogpf.o
 	$(COMPILER) $(COMPILER_OPTS)  transfer.f90
 	
 svd.o: svd.f90
@@ -172,6 +172,9 @@ mpi_routines_fake.o: mpi_routines_fake.f90
 
 inversion.o: inversion.f90 marquardt.o
 	$(COMPILER) $(COMPILER_OPTS) $(NETCDF_INCLUDE) inversion.f90
-	
+
+ogpf.o: ogpf.f90
+	$(COMPILER) $(COMPILER_OPTS) $(NETCDF_INCLUDE) ogpf.f90
+
 $(HAZEL_MAIN_OBJ): $(HAZEL_DEP)
 	$(COMPILER) $(COMPILER_OPTS) $(NETCDF_INCLUDE) $(PREPROCESS) $(HAZEL_MAIN_SRC)
