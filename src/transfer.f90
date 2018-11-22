@@ -58,7 +58,7 @@ contains
       enddo
 
       ! Create arrays for the current and the previous radiation field
-      ! parameters, $\bar{n}$ and $\omega$, ...
+      ! parameters, \( \bar{n} \) and \( \omega \), ...
       allocate( slab%nbar(      slab%n_layers, atom%ntran ), source = 0d0 )
       allocate( slab%omega(     slab%n_layers, atom%ntran ), source = 0d0 )
       allocate( slab%nbar_old(  slab%n_layers, atom%ntran ), source = 0d0 )
@@ -82,6 +82,7 @@ contains
       slab%nbar_old  = slab%nbar
       slab%omega_old = slab%omega
 
+
       ! Create an array for the boundary conditions...
       allocate( slab%boundary( 4, spectrum_size, slab%aq_size ), source = 0d0 )
 
@@ -101,7 +102,7 @@ contains
       do angle = 1, slab%aq_size
         ! for all inclinations \( \theta \) having
         ! \( \mu = \cos\theta > \cos\gamma \).
-        mu = cos( slab%aq_inclination( angle ) )
+        mu = cos( slab%aq_inclination( angle ) * PI / 180d0 )
         if ( mu > illumination_cone_cosine ) then
           ! Eq. 12.33 of Landi degl'Innocenti & Landolfi (2004).
           cos_alpha = sqrt( mu**2 - illumination_cone_cosine**2 ) / illumination_cone_sine
@@ -121,9 +122,6 @@ contains
         endif
       enddo
 
-      call gp%options('set style data linespoints; set grid')
-      call gp%plot( multiplets(1)%d_lambdas, slab%boundary( 1, 1:200, 1 ), 'lt 7' ) 
-      stop
 
       ! Generate the absorption profile.
       allocate( slab%absorption_profile( slab%n_layers, spectrum_size, slab%aq_size ), source = 0d0 )
@@ -131,19 +129,30 @@ contains
       do angle = 1, slab%aq_size
         do layer = 1, slab%n_layers
           ! The LoS velocity is the projection of v_z along the angle direction.
-          v_los = slab%v_z( layer ) * cos( slab%aq_inclination( angle ) )
+          ! Take the opposite sign following the astrophysical convention that
+          ! the velocity is positive for redshifted profiles.  For more details
+          ! see a comment below.
+          v_los = -slab%v_z( layer ) * cos( slab%aq_inclination( angle ) * PI / 180d0 )
           ! The damping parameter.
           adamp = slab%damping( layer )
-          ! The Doppler width in Hz.
-          d_nu_dopp = in_params%vdopp*1.d5 / ( in_fixed%wl * 1.d-8 )
-          d_nu_dopp = slab%vthermal( layer ) * 1d5 / ( in_fixed%wl * 1d-8 )
-          prof = profile( in_params%damping, in_observation%freq / d_nu_dopp ) / ( d_nu_dopp * SQRTPI )
+          do line = 1, atom%ntran
+            wavelength = multiplets( line )%wl
+            begin_ind  = multiplets( line )%begin
+            end_ind    = multiplets( line )%end
+
+            ! The Doppler width in Hz.
+            d_nu_dopp = slab%vthermal( layer ) * 1d5 / ( wavelength * 1d-8 )
+
+            slab%absorption_profile( layer, begin_ind:end_ind, angle ) = dble( &
+                profile( adamp, -multiplets( line )%d_nus / d_nu_dopp - v_los / slab%vthermal( layer ) ) &
+                / ( d_nu_dopp * SQRTPI ) &
+              )
+          enddo
         enddo
       enddo
 
-
-      allocate( slab%propagation_matrix( 4, 4, slab%n_layers, spectrum_size, slab%aq_size ), source = 0d0 )
-      allocate( slab%emission_vector(       4, slab%n_layers, spectrum_size, slab%aq_size ), source = 0d0 )
+      !allocate( slab%propagation_matrix( 4, 4, slab%n_layers, spectrum_size, slab%aq_size ), source = 0d0 )
+      !allocate( slab%emission_vector(       4, slab%n_layers, spectrum_size, slab%aq_size ), source = 0d0 )
       !allocate(slab%tau(slab%n_layers,in_fixed%no))
       !allocate(prof(in_fixed%no))
 
@@ -152,6 +161,11 @@ contains
       !allocate(J00(slab%n_layers))
       !allocate(J20(slab%n_layers))
 
+      call gp%title( 'Absorption profile along different rays' )
+      call gp%xlabel ( 'd_lambda, A' )
+      call gp%ylabel ( 'phi, [Hz^{-1}]' )
+      call gp%options( 'set style data linespoints; set grid; set key top left' )
+      call gp%plot( [(i * 1d0, i = 1, 200)], slab%absorption_profile( 1, 1:200, 5:6 ) ) ! 'lt 7'
       stop
 
 
@@ -510,7 +524,7 @@ contains
         do loop_mu = 1, nmus
 
             !mu = slab%mus(loop_mu)
-            mu = cos( slab%aq_inclination( loop_mu ) )
+            mu = cos( slab%aq_inclination( loop_mu ) * PI / 180d0 )
 
 ! If going upwards
             if (mu > 0) then
