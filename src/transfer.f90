@@ -16,9 +16,9 @@ contains
     type(fixed_parameters) :: in_fixed
     type(type_slab) :: slab
     real(kind=8) :: output(0:3,in_fixed%no)
-    integer :: i, loop_iteration, loop_shell, error, j
+    integer :: i, iteration, loop_shell, error, j
     real(kind=8) :: I0, Q0, U0, V0, ds, Imax, Ic, factor, eta0, psim, psi0
-    real(kind=8) :: relative_change(2), vmacro
+    real(kind=8) :: tolerance(2), vmacro
     real(kind=8), allocatable, dimension(:) :: epsI, epsQ, epsU, epsV, etaI, etaQ, etaU, etaV, dtau
     real(kind=8), allocatable, dimension(:) :: rhoQ, rhoU, rhoV, delta, prof(:)
     real(kind=8), allocatable :: StokesM(:), kappa_prime(:,:), kappa_star(:,:), identity(:,:)
@@ -161,62 +161,81 @@ contains
       !allocate(J00(slab%n_layers))
       !allocate(J20(slab%n_layers))
 
-      call gp%title( 'Absorption profile along different rays' )
-      call gp%xlabel ( 'd_lambda, A' )
-      call gp%ylabel ( 'phi, [Hz^{-1}]' )
-      call gp%options( 'set style data linespoints; set grid; set key top left' )
-      call gp%plot( [(i * 1d0, i = 1, 200)], slab%absorption_profile( 1, 1:200, 5:6 ) ) ! 'lt 7'
+      !call gp%title( 'Absorption profile along different rays' )
+      !call gp%xlabel ( 'd_lambda, A' )
+      !call gp%ylabel ( 'phi, [Hz^{-1}]' )
+      !call gp%options( 'set style data linespoints; set grid; set key top left' )
+      !call gp%plot( [(i * 1d0, i = 1, 200)], slab%absorption_profile( 1, 1:200, 5:6 ) ) ! 'lt 7'
+      !stop
+
+      ! Initialize iterations
+      tolerance = 100.d0
+      iteration = 1
+
+      do while (iteration < 50 .and. maxval( tolerance ) > 1d-3 )
+        ! Iterate along the layers computing and storing the radiative trasnfer
+        ! quantities because fill_SEE() evaluates the density matrix elements
+        ! only for the current layer and is very time-consuming.
+        do layer = 1, slab%n_layers
+
+          ! To fill and solve the statistical equilibrium equations, get for
+          ! the current slab the following parameters needed by fill_SEE().  The
+          ! original values provided in init_parameters.dat are not needed.
+          !in_params%delta_collision  ! Don't change this.
+          !in_params%bgauss2          ! Don't use the 2nd component in the non-linear mode.
+          !in_params%chibd2
+          !in_params%thetabd2
+          in_params%bgauss  = slab%B(    layer )
+          in_params%chibd   = slab%thB(  layer )
+          in_params%thetabd = slab%chiB( layer )
+
+          ! ...pass the new nbar and omega in the current layer.
+          nbarExternal  = slab%nbar(  layer, : )
+          omegaExternal = slab%omega( layer, : )
+
+          ! For the first component only...
+          call fill_SEE( in_params, in_fixed, 1, error )
+
+          ! To calculate the absorption/emission coefficients, restore the
+          ! damping parameters...
+          in_params%damping = slab%damping(  layer )
+          in_params%vdopp   = slab%vthermal( layer )
+
+          ! To save time on allocating/deallocating arrays, first iterate lines.
+          do line = 1, atom%ntran
+
+            n_points = multiplets( line )%no
+
+            ! TODO: replace this with static arrays when possible.
+            if ( .not.allocated( epsI ) ) allocate( epsI( in_fixed%no ), source = 0d0 )
+            if ( .not.allocated( epsQ ) ) allocate( epsQ( in_fixed%no ), source = 0d0 )
+            if ( .not.allocated( epsU ) ) allocate( epsU( in_fixed%no ), source = 0d0 )
+            if ( .not.allocated( epsV ) ) allocate( epsV( in_fixed%no ), source = 0d0 )
+            if ( .not.allocated( etaI ) ) allocate( etaI( in_fixed%no ), source = 0d0 )
+            if ( .not.allocated( etaQ ) ) allocate( etaQ( in_fixed%no ), source = 0d0 )
+            if ( .not.allocated( etaU ) ) allocate( etaU( in_fixed%no ), source = 0d0 )
+            if ( .not.allocated( etaV ) ) allocate( etaV( in_fixed%no ), source = 0d0 )
+            if ( .not.allocated( rhoQ ) ) allocate( rhoQ( in_fixed%no ), source = 0d0 )
+            if ( .not.allocated( rhoU ) ) allocate( rhoU( in_fixed%no ), source = 0d0 )
+            if ( .not.allocated( rhoV ) ) allocate( rhoV( in_fixed%no ), source = 0d0 )
+            if ( .not.allocated( dtau ) ) allocate( dtau( in_fixed%no ), source = 0d0 )
+
+            
+
+            !in_params%vmacro  = slab%vmacro( loop_shell )
+            deallocate( epsI, epsQ, epsU, epsV, etaI, etaQ, etaU, etaV, rhoQ, rhoU, rhoV, dtau )
+          enddo ! line
+        enddo ! layer
       stop
+      enddo ! iteration & tolerance
 
 
-
-      relative_change = 100.d0
-
-      loop_iteration = 1
-
-! velocity-free approximation
-        vmacro = in_params%vmacro
-        in_params%vmacro = 0.0
-        
-        do while (loop_iteration < 50 .and. relative_change(1) > 1d-3 .and. relative_change(2) > 1d-3)
+        do while (iteration < 50 .and. maxval( tolerance ) > 1d-3 )
 
             do loop_shell = 1, slab%n_layers
 
-                ! To fill and solve the statistical equilibrium equations,
-                ! restore  the magnetic field vector in the current slab and...
-                in_params%bgauss  = slab%B(    loop_shell )
-                in_params%thetabd = slab%thB(  loop_shell )
-                in_params%chibd   = slab%chiB( loop_shell )
-
-                ! ...pass the obtained nbar and omega in the current shell.
-                nbarExternal  = slab%nbar(  loop_shell, : )
-                omegaExternal = slab%omega( loop_shell, : )
-
-                ! For the first component only...
-                call fill_SEE( in_params, in_fixed, 1, error )
-
-                ! To calculate the absorption/emission coefficients, restore the
-                ! damping parameters...
-                in_params%damping = slab%damping(  loop_shell )
-                in_params%vdopp   = slab%vthermal( loop_shell )
-                ! TODO: The LoS velocity is needed as well but it should be made
-                ! with a different angle quadrature.
-                !in_params%vmacro  = slab%vmacro( loop_shell )
-
                 call calc_rt_coef( in_params, in_fixed, in_observation, 1 )
 
-                if (.not.allocated(epsI)) allocate(epsI(in_fixed%no))
-                if (.not.allocated(epsQ)) allocate(epsQ(in_fixed%no))
-                if (.not.allocated(epsU)) allocate(epsU(in_fixed%no))
-                if (.not.allocated(epsV)) allocate(epsV(in_fixed%no))
-                if (.not.allocated(etaI)) allocate(etaI(in_fixed%no))
-                if (.not.allocated(etaQ)) allocate(etaQ(in_fixed%no))
-                if (.not.allocated(etaU)) allocate(etaU(in_fixed%no))
-                if (.not.allocated(etaV)) allocate(etaV(in_fixed%no))
-                if (.not.allocated(rhoQ)) allocate(rhoQ(in_fixed%no))
-                if (.not.allocated(rhoU)) allocate(rhoU(in_fixed%no))
-                if (.not.allocated(rhoV)) allocate(rhoV(in_fixed%no))
-                if (.not.allocated(dtau)) allocate(dtau(in_fixed%no))
             
                 if (.not.allocated(StokesM)) allocate(StokesM(4))
 
@@ -321,25 +340,25 @@ contains
             slab%nbar(:,1) = J00 * (in_fixed%wl*1.d-8)**3 / (2.d0*PC*PH)
             slab%omega(:,1) = J20 / J00 * sqrt(2.d0)
 
-            loop_iteration = loop_iteration + 1
+            iteration = iteration + 1
 
             !+DEBUG
-            !write (*, '(a, i4, a, 2es20.8)') 'Iteration: ', loop_iteration - 1, ', nbar:     ', slab%nbar
-            !write (*, '(a, i4, a, 2es20.8)') 'Iteration: ', loop_iteration - 1, ', nbar_old: ', slab%nbar_old
-            !write (*, '(a, i4, a, 2es20.8)') 'Iteration: ', loop_iteration - 1, ', omega:     ', slab%omega
-            !write (*, '(a, i4, a, 2es20.8)') 'Iteration: ', loop_iteration - 1, ', omega_old: ', slab%omega_old
-            write (*, '(a, i4, a, es20.8, a, i4)') 'Iteration: ', loop_iteration - 1, ', max |dn/n|: ', maxval(abs(slab%nbar - slab%nbar_old) / abs(slab%nbar)), ' at layer ', maxloc(abs(slab%nbar - slab%nbar_old) / abs(slab%nbar), 1)
-            write (*, '(a, i4, a, es20.8, a, i4)') 'Iteration: ', loop_iteration - 1, ', max |do/o|: ', maxval(abs(slab%omega - slab%omega_old) / abs(slab%omega)), ' at layer ', maxloc(abs(slab%omega - slab%omega_old) / abs(slab%omega), 1)
+            !write (*, '(a, i4, a, 2es20.8)') 'Iteration: ', iteration - 1, ', nbar:     ', slab%nbar
+            !write (*, '(a, i4, a, 2es20.8)') 'Iteration: ', iteration - 1, ', nbar_old: ', slab%nbar_old
+            !write (*, '(a, i4, a, 2es20.8)') 'Iteration: ', iteration - 1, ', omega:     ', slab%omega
+            !write (*, '(a, i4, a, 2es20.8)') 'Iteration: ', iteration - 1, ', omega_old: ', slab%omega_old
+            write (*, '(a, i4, a, es20.8, a, i4)') 'Iteration: ', iteration - 1, ', max |dn/n|: ', maxval(abs(slab%nbar - slab%nbar_old) / abs(slab%nbar)), ' at layer ', maxloc(abs(slab%nbar - slab%nbar_old) / abs(slab%nbar), 1)
+            write (*, '(a, i4, a, es20.8, a, i4)') 'Iteration: ', iteration - 1, ', max |do/o|: ', maxval(abs(slab%omega - slab%omega_old) / abs(slab%omega)), ' at layer ', maxloc(abs(slab%omega - slab%omega_old) / abs(slab%omega), 1)
             !-DEBUG
 
-            relative_change(1) = maxval(abs(slab%nbar - slab%nbar_old) / abs(slab%nbar))
-            relative_change(2) = maxval(abs(slab%omega - slab%omega_old) / abs(slab%omega))
+            tolerance(1) = maxval(abs(slab%nbar - slab%nbar_old) / abs(slab%nbar))
+            tolerance(2) = maxval(abs(slab%omega - slab%omega_old) / abs(slab%omega))
 
             slab%nbar_old = slab%nbar
             slab%omega_old = slab%omega
 
-            !print *, 'Maximum relative change : ', relative_change
-            !write (*, '(a, i4, a, 2es9.2)') 'Iteration: ', loop_iteration - 1, ', max. rel. change: ', relative_change
+            !print *, 'Maximum relative change : ', tolerance
+            !write (*, '(a, i4, a, 2es9.2)') 'Iteration: ', iteration - 1, ', max. rel. change: ', tolerance
 
         enddo
 

@@ -21,7 +21,6 @@ contains
     real(kind=8) :: flarmor, bcoeff, d, thb, chb
     integer, allocatable :: indx(:)
 
-
         if (verbose_mode == 1) then
             print *, 'Number of transitions : ', atom%ntran
         endif
@@ -946,6 +945,5 @@ contains
 !       deallocate(SEE_A)
 !       deallocate(SEE_mag_A)
 !       deallocate(SEE_b)
-        
     end subroutine fill_SEE
 end module SEE
