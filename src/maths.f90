@@ -1111,11 +1111,37 @@ contains
 
     end function dawson
 
-!--------------------------------------------------------------
-! Generates Voigt and anomalous dispersion profiles using a different damping for each frequency
-! point
+!-------------------------------------------------------------------------------
+! Generates Voigt and anomalous dispersion profiles using a different damping
+! for each frequency point
 ! See Humlicek (1982) JQSRT 27, 437
-!--------------------------------------------------------------
+!
+! A.V.S.: Important note.  The dispersion profile, such as in Eq. (5.37) in the
+! Book, has positive left and negative right lobes, while the Fadeeva function
+! (Egidio calls it Faraday-Voigt function) is reversed, similarly to the Dawson
+! function.  To get the right sign of the lobes, Egidio puts the reduced
+! frequency argument dv in the function with the negative sign as in the two
+! inner loops of calc_rt_coef() such as (onum0 - onum - va) in agreement with
+! the Eq. (5.44) of the Book, where v ~ nu0 - nu is actually the reversed
+! frequency shift.  Plotting such a profile along the wavelength axis one
+! obtains the same order of lobes as in the original Fadeeva function.  In no-
+! polarization radiative transfer codes, the Voigt function is always called
+! with non-reversed dv argument and this confuses many people who try to do the
+! same in polarization codes.  The truth is that the Voigt function must also be
+! called with -dv argument but it is even, therefore, one gets the correct value
+! while calling the function with wrong, unreversed argument +dv.
+!
+! Another problem is the sign convention for Doppler-shifts.  Egidio adopts the
+! astronomical convention: the sign of v_a or dlam_a is positive when the
+! velocity is antiparallel to the LoS (receding from the observer) so that the
+! corresponding absorption profile is red-shifted.  This is counterintuitive
+! because it is in odds with the physical convention: v_a is negative for
+! upflows in the atmosphere and vice versa.  Keep this convention as is and use
+! the same expression calling the profile() function as I mentioned above
+! because the code must be backward-compatible with the old `slab model'.  But,
+! when treating macroscopic velocities in the atmosphere, reverse the sign of
+! the LoS projection.
+!-------------------------------------------------------------------------------
     function profile(da, dv)
     real(kind=8) :: da
     real(kind=8) :: dv(:)
