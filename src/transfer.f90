@@ -19,8 +19,11 @@ contains
     integer :: i, iteration, loop_shell, error, j
     real(kind=8) :: I0, Q0, U0, V0, ds, Imax, Ic, factor, eta0, psim, psi0
     real(kind=8) :: tolerance(2), vmacro
-    real(kind=8), allocatable, dimension(:) :: epsI, epsQ, epsU, epsV, etaI, etaQ, etaU, etaV, dtau
-    real(kind=8), allocatable, dimension(:) :: rhoQ, rhoU, rhoV, delta, prof(:)
+    real(kind=8), allocatable ::          &
+      epsI(:), epsQ(:), epsU(:), epsV(:), &
+      etaI(:), etaQ(:), etaU(:), etaV(:), &
+               rhoQ(:), rhoU(:), rhoV(:)  !
+    real(kind=8), allocatable, dimension(:) :: dtau, delta, prof(:)
     real(kind=8), allocatable :: m1(:,:), m2(:,:), Stokes0(:)
     real(kind=8), allocatable :: O_evol(:,:), psi_matrix(:,:), J00(:), J20(:), J00_nu(:,:), J20_nu(:,:)
 
@@ -66,7 +69,7 @@ contains
       ! ...and initialize the current nbar and omega in all layers with the same
       ! values using Allen's tables to start iterating.
       if ( verbose_mode == 1 ) then
-          write (*, '(a)') 'Initial nbar and omega:'
+        write (*, '(a)') 'Initial nbar and omega:'
       endif
       do line = 1, atom%ntran
         wavelength = atom%wavelength( line )
@@ -74,7 +77,7 @@ contains
         slab%nbar(  :, line ) = nbar_allen(  wavelength, in_fixed, in_params, atom%reduction_factor(       line ) )
         slab%omega( :, line ) = omega_allen( wavelength, in_fixed, in_params, atom%reduction_factor_omega( line ) )
         if ( verbose_mode == 1 ) then
-            write (*, '(4x, a, f9.3, 2(a, e8.2))') 'wavelength = ', wavelength, ' A, nbar = ', slab%nbar( 1, line ), ', omega = ', slab%omega( 1, line )
+          write (*, '(4x, a, f9.3, 2(a, e8.2))') 'wavelength = ', wavelength, ' A, nbar = ', slab%nbar( 1, line ), ', omega = ', slab%omega( 1, line )
         endif
       enddo
       ! Set the previous values to the current ones.
@@ -150,10 +153,7 @@ contains
         enddo
       enddo
 
-      !allocate( slab%propagation_matrix( 4, 4, slab%n_layers, spectrum_size, slab%aq_size ), source = 0d0 )
-      !allocate( slab%emission_vector(       4, slab%n_layers, spectrum_size, slab%aq_size ), source = 0d0 )
       !allocate(slab%tau(slab%n_layers,in_fixed%no))
-      !allocate(prof(in_fixed%no))
 
       !allocate(J00_nu(slab%n_layers,in_fixed%no))
       !allocate(J20_nu(slab%n_layers,in_fixed%no))
@@ -167,11 +167,14 @@ contains
       !call gp%plot( [(i * 1d0, i = 1, 200)], slab%absorption_profile( 1, 1:200, 5:6 ) ) ! 'lt 7'
       !stop
 
+      allocate( slab%propagation_matrix( 4, 4, slab%n_layers, spectrum_size, slab%aq_size ), source = 0d0 )
+      allocate( slab%emission_vector(       4, slab%n_layers, spectrum_size, slab%aq_size ), source = 0d0 )
+
       ! Initialize iterations
       tolerance = 100.d0
       iteration = 1
 
-      do while (iteration < 50 .and. maxval( tolerance ) > 1d-3 )
+      do while ( iteration < 50 .and. maxval( tolerance ) > 1d-3 )
         ! Iterate along the layers computing and storing the radiative trasnfer
         ! quantities because fill_SEE() evaluates the density matrix elements
         ! only for the current layer and is very time-consuming.
@@ -191,6 +194,7 @@ contains
           ! ...pass the new nbar and omega in the current layer.
           nbarExternal  = slab%nbar(  layer, : )
           omegaExternal = slab%omega( layer, : )
+
 
           ! For the first component only...
           call fill_SEE( in_params, in_fixed, 1, error )
@@ -216,6 +220,7 @@ contains
             in_fixed%wl       = multiplets( line )%wl
             in_fixed%d_wl_min = multiplets( line )%d_wl_min
             in_fixed%d_wl_max = multiplets( line )%d_wl_max
+            in_observation%wl = multiplets( line )%d_lambdas
 
             ! TODO: replace this with static arrays when possible.
             if ( .not.allocated( epsI ) ) allocate( epsI( in_fixed%no ), source = 0d0 )
@@ -256,10 +261,61 @@ contains
               !  mag_opt       mag_opt_zeeman
               !  mag_opt_stim  mag_opt_stim_zeeman
 
+              ! Collect the elements of the absorption matrix and the emision vector.
+              if (in_fixed%use_atomic_pol == 1) then
+                ! Emission
+                epsI = epsilon( 0, : )
+                epsQ = epsilon( 1, : )
+                epsU = epsilon( 2, : )
+                epsV = epsilon( 3, : )
+                ! Absorption including stimulated emission
+                etaI = eta( 0, : ) - use_stim_emission_RT * eta_stim( 0, : ) 
+                etaQ = eta( 1, : ) - use_stim_emission_RT * eta_stim( 1, : )
+                etaU = eta( 2, : ) - use_stim_emission_RT * eta_stim( 2, : )
+                etaV = eta( 3, : ) - use_stim_emission_RT * eta_stim( 3, : )
+                ! Magneto-optical effects
+                if ( use_mag_opt_RT == 1 ) then
+                  rhoQ = mag_opt( 1, : ) - use_stim_emission_RT * mag_opt_stim( 1, : )
+                  rhoU = mag_opt( 2, : ) - use_stim_emission_RT * mag_opt_stim( 2, : )
+                  rhoV = mag_opt( 3, : ) - use_stim_emission_RT * mag_opt_stim( 3, : )
+                else
+                  rhoQ = 0d0
+                  rhoU = 0d0
+                  rhoV = 0d0
+                endif
+              else ! No atomic polarization, the Zeeman effect only.
+                ! Emission
+                epsI = epsilon_zeeman( 0, : )
+                epsQ = epsilon_zeeman( 1, : )
+                epsU = epsilon_zeeman( 2, : )
+                epsV = epsilon_zeeman( 3, : )
+                ! Absorption including stimulated emission
+                etaI = eta_zeeman( 0, : ) - use_stim_emission_RT * eta_stim_zeeman( 0, : ) + 1d-20
+                etaQ = eta_zeeman( 1, : ) - use_stim_emission_RT * eta_stim_zeeman( 1, : ) + 1d-20
+                etaU = eta_zeeman( 2, : ) - use_stim_emission_RT * eta_stim_zeeman( 2, : ) + 1d-20
+                etaV = eta_zeeman( 3, : ) - use_stim_emission_RT * eta_stim_zeeman( 3, : ) + 1d-20
+                ! Magneto-optical terms
+                if ( use_mag_opt_RT == 1 ) then
+                  rhoQ = mag_opt_zeeman( 1, : ) - use_stim_emission_RT * mag_opt_stim_zeeman( 1, : )
+                  rhoU = mag_opt_zeeman( 2, : ) - use_stim_emission_RT * mag_opt_stim_zeeman( 2, : )
+                  rhoV = mag_opt_zeeman( 3, : ) - use_stim_emission_RT * mag_opt_stim_zeeman( 3, : )
+                else
+                  rhoQ = 0d0
+                  rhoU = 0d0
+                  rhoV = 0d0
+                endif
+              endif ! use_atomic_pol
+
+              ! TODO: Replace this with the inline code, subroutine calls are slow for each frequency.
+              do i_nu = 1, in_fixed%no
+                call fill_absorption_matrix( slab%propagation_matrix( :, :, layer, begin_ind + i_nu - 1, angle ), etaI( i_nu ), etaQ( i_nu ), etaU( i_nu ), etaV( i_nu ), rhoQ( i_nu ), rhoU( i_nu ), rhoV( i_nu ) )
+              enddo
+              slab%emission_vector( 1, layer, begin_ind:end_ind, angle ) = epsI
+              slab%emission_vector( 2, layer, begin_ind:end_ind, angle ) = epsQ
+              slab%emission_vector( 3, layer, begin_ind:end_ind, angle ) = epsU
+              slab%emission_vector( 4, layer, begin_ind:end_ind, angle ) = epsV
 
             enddo ! angle
-
-            !in_params%vmacro  = slab%vmacro( loop_shell )
 
             deallocate( epsI, epsQ, epsU, epsV, etaI, etaQ, etaU, etaV, rhoQ, rhoU, rhoV, dtau )
 
@@ -270,6 +326,11 @@ contains
 
           enddo ! line
 
+          ! Scale the absorption matrix and the emission vector to physical
+          ! units by multiplying by the number density.
+          slab%propagation_matrix( :, :, layer, :, : ) = slab%propagation_matrix( :, :, layer, :, : ) * slab%density( layer )
+          slab%emission_vector(       :, layer, :, : ) = slab%emission_vector(       :, layer, :, : ) * slab%density( layer )
+
           ! Restore the original properties of the line for which the intensity
           ! output must be computed.
           in_fixed%nemiss   = save_nemiss
@@ -279,83 +340,14 @@ contains
           in_fixed%d_wl_max = multiplets( save_nemiss )%d_wl_max
 
         enddo ! layer
+
+        ! Now solve the transfer equation and intergrate the radiation field tensors.
+
       stop
       enddo ! iteration & tolerance
 
 
         do while (iteration < 50 .and. maxval( tolerance ) > 1d-3 )
-
-            do loop_shell = 1, slab%n_layers
-
-
-                if (in_fixed%use_atomic_pol == 1) then
-! Emission                
-                    epsI = epsilon(0,:)
-                    epsQ = epsilon(1,:)
-                    epsU = epsilon(2,:)
-                    epsV = epsilon(3,:)
-
-                
-! Absorption including stimulated emission
-                    etaI = eta(0,:) - use_stim_emission_RT * eta_stim(0,:)
-                    etaQ = eta(1,:) - use_stim_emission_RT * eta_stim(1,:)
-                    etaU = eta(2,:) - use_stim_emission_RT * eta_stim(2,:)
-                    etaV = eta(3,:) - use_stim_emission_RT * eta_stim(3,:)
-
-! Magneto-optical effects
-                    if (use_mag_opt_RT == 1) then
-                        rhoQ = mag_opt(1,:) - use_stim_emission_RT * mag_opt_stim(1,:)
-                        rhoU = mag_opt(2,:) - use_stim_emission_RT * mag_opt_stim(2,:)
-                        rhoV = mag_opt(3,:) - use_stim_emission_RT * mag_opt_stim(3,:)
-                    else
-                        rhoQ = 0.d0
-                        rhoU = 0.d0
-                        rhoV = 0.d0
-                    endif
-                else
-    ! Emission
-                    epsI = epsilon_zeeman(0,:)
-                    epsQ = epsilon_zeeman(1,:)
-                    epsU = epsilon_zeeman(2,:)
-                    epsV = epsilon_zeeman(3,:)
-
-    ! Absorption including stimulated emission
-                    etaI = eta_zeeman(0,:) - use_stim_emission_RT * eta_stim_zeeman(0,:) + 1.d-20
-                    etaQ = eta_zeeman(1,:) - use_stim_emission_RT * eta_stim_zeeman(1,:) + 1.d-20
-                    etaU = eta_zeeman(2,:) - use_stim_emission_RT * eta_stim_zeeman(2,:) + 1.d-20
-                    etaV = eta_zeeman(3,:) - use_stim_emission_RT * eta_stim_zeeman(3,:) + 1.d-20
-
-    ! Magneto-optical terms
-                    if (use_mag_opt_RT == 1) then
-                        rhoQ = mag_opt_zeeman(1,:) - use_stim_emission_RT * mag_opt_stim_zeeman(1,:)
-                        rhoU = mag_opt_zeeman(2,:) - use_stim_emission_RT * mag_opt_stim_zeeman(2,:)
-                        rhoV = mag_opt_zeeman(3,:) - use_stim_emission_RT * mag_opt_stim_zeeman(3,:)
-                    else
-                        rhoQ = 0.d0
-                        rhoU = 0.d0
-                        rhoV = 0.d0
-                    endif
-                endif
-
-! Set emission vector at this shell
-                slab%emission_vector(1,loop_shell,:, angle) = epsI
-                slab%emission_vector(2,loop_shell,:, angle) = epsQ
-                slab%emission_vector(3,loop_shell,:, angle) = epsU
-                slab%emission_vector(4,loop_shell,:, angle) = epsV
-
-! Set propagation matrix at this shell
-                do i = 1, in_fixed%no
-                    call fill_absorption_matrix( slab%propagation_matrix( :, :, loop_shell, i, angle ), &
-                        etaI(i),etaQ(i),etaU(i),etaV(i),rhoQ(i),rhoU(i),rhoV(i))
-                enddo
-
-! Multiply by the density
-                slab%propagation_matrix( :, :, loop_shell, :, angle ) = slab%propagation_matrix( :, :, loop_shell, :, angle ) * &
-                    slab%density(loop_shell)
-                slab%emission_vector( :, loop_shell, :, angle ) = slab%emission_vector( :, loop_shell, :, angle ) * &
-                    slab%density( loop_shell )
-
-            enddo
 
             J00 = 0.d0
             J20 = 0.d0
