@@ -21,12 +21,11 @@ contains
     real(kind=8) :: tolerance(2), vmacro
     real(kind=8), allocatable, dimension(:) :: epsI, epsQ, epsU, epsV, etaI, etaQ, etaU, etaV, dtau
     real(kind=8), allocatable, dimension(:) :: rhoQ, rhoU, rhoV, delta, prof(:)
-    real(kind=8), allocatable :: StokesM(:), kappa_prime(:,:), kappa_star(:,:), identity(:,:)
-    real(kind=8), allocatable :: source(:), m1(:,:), m2(:,:), Stokes0(:)
+    real(kind=8), allocatable :: m1(:,:), m2(:,:), Stokes0(:)
     real(kind=8), allocatable :: O_evol(:,:), psi_matrix(:,:), J00(:), J20(:), J00_nu(:,:), J20_nu(:,:)
 
-    integer(kind=4) :: line, layer, angle, spectrum_size, begin_ind, end_ind, n_points, i_nu
-    real(kind=8) :: mu, illumination_cone_cosine, illumination_cone_sine, cos_alpha, wavelength, v_los, d_nu_dopp, resolution, adamp
+    integer(kind=4) :: line, layer, angle, spectrum_size, begin_ind, end_ind, n_points, i_nu, save_nemiss
+    real(kind=8) :: mu, illumination_cone_cosine, illumination_cone_sine, cos_alpha, wavelength, v_los, d_nu_dopp, resolution, adamp, save_thetad, save_chid, save_gammad
 
     ! ogpf
     type(gpf) :: gp
@@ -196,15 +195,27 @@ contains
           ! For the first component only...
           call fill_SEE( in_params, in_fixed, 1, error )
 
-          ! To calculate the absorption/emission coefficients, restore the
-          ! damping parameters...
+          ! To calculate the absorption/emission coefficients, set the line
+          ! broadening parameters...
           in_params%damping = slab%damping(  layer )
           in_params%vdopp   = slab%vthermal( layer )
+
+          ! Save the original line number for which the intensity output must be
+          ! computed.
+          save_nemiss = in_fixed%nemiss
 
           ! To save time on allocating/deallocating arrays, first iterate lines.
           do line = 1, atom%ntran
 
-            n_points = multiplets( line )%no
+            ! Set the current line properties.
+            in_fixed%nemiss = line
+
+            in_fixed%no       = multiplets( line )%no
+            begin_ind         = multiplets( line )%begin
+            end_ind           = multiplets( line )%end
+            in_fixed%wl       = multiplets( line )%wl
+            in_fixed%d_wl_min = multiplets( line )%d_wl_min
+            in_fixed%d_wl_max = multiplets( line )%d_wl_max
 
             ! TODO: replace this with static arrays when possible.
             if ( .not.allocated( epsI ) ) allocate( epsI( in_fixed%no ), source = 0d0 )
@@ -220,11 +231,53 @@ contains
             if ( .not.allocated( rhoV ) ) allocate( rhoV( in_fixed%no ), source = 0d0 )
             if ( .not.allocated( dtau ) ) allocate( dtau( in_fixed%no ), source = 0d0 )
 
-            
+            ! Save the original LoS.
+            save_thetad = in_fixed%thetad
+            save_chid   = in_fixed%chid
+            save_gammad = in_fixed%gammad
+
+            do angle = 1, slab%aq_size
+
+              ! Set the LoS angles to the current ray of the quadrature.
+              in_fixed%thetad = slab%aq_inclination( angle )
+              in_fixed%chid   = slab%aq_azimuth(     angle )
+              in_fixed%gammad = in_fixed%gammad ! TODO: not clear what should be here.
+
+              ! Set the LoS velocity: the reversed projection of v_z along the
+              ! current LoS.
+              in_params%vmacro = -slab%v_z( layer ) * cos( in_fixed%thetad * PI / 180d0 )
+
+              call calc_rt_coef( in_params, in_fixed, in_observation, 1 )
+
+              ! We have the following arrays of the ( 0:3, n_nu ) size:
+              !  epsilon       epsilon_zeeman
+              !  eta           eta_zeeman
+              !  eta_stim      eta_stim_zeeman
+              !  mag_opt       mag_opt_zeeman
+              !  mag_opt_stim  mag_opt_stim_zeeman
+
+
+            enddo ! angle
 
             !in_params%vmacro  = slab%vmacro( loop_shell )
+
             deallocate( epsI, epsQ, epsU, epsV, etaI, etaQ, etaU, etaV, rhoQ, rhoU, rhoV, dtau )
+
+            ! Restore the original LoS.
+            in_fixed%thetad = save_thetad
+            in_fixed%chid   = save_chid
+            in_fixed%gammad = save_gammad
+
           enddo ! line
+
+          ! Restore the original properties of the line for which the intensity
+          ! output must be computed.
+          in_fixed%nemiss   = save_nemiss
+          in_fixed%no       = multiplets( save_nemiss )%no
+          in_fixed%wl       = multiplets( save_nemiss )%wl
+          in_fixed%d_wl_min = multiplets( save_nemiss )%d_wl_min
+          in_fixed%d_wl_max = multiplets( save_nemiss )%d_wl_max
+
         enddo ! layer
       stop
       enddo ! iteration & tolerance
@@ -234,18 +287,6 @@ contains
 
             do loop_shell = 1, slab%n_layers
 
-                call calc_rt_coef( in_params, in_fixed, in_observation, 1 )
-
-            
-                if (.not.allocated(StokesM)) allocate(StokesM(4))
-
-                if (.not.allocated(source)) allocate(source(4))
-                if (.not.allocated(kappa_star)) allocate(kappa_star(4,4))
-
-                StokesM(1) = in_fixed%Stokes_incident(0)
-                StokesM(2) = in_fixed%Stokes_incident(1)
-                StokesM(3) = in_fixed%Stokes_incident(2)
-                StokesM(4) = in_fixed%Stokes_incident(3)
 
                 if (in_fixed%use_atomic_pol == 1) then
 ! Emission                
@@ -407,15 +448,6 @@ contains
             if (.not.allocated(rhoV)) allocate(rhoV(in_fixed%no))
             if (.not.allocated(dtau)) allocate(dtau(in_fixed%no))
             
-            if (.not.allocated(StokesM)) allocate(StokesM(4))
-
-            if (.not.allocated(source)) allocate(source(4))
-            if (.not.allocated(kappa_star)) allocate(kappa_star(4,4))
-
-            StokesM(1) = in_fixed%Stokes_incident(0)
-            StokesM(2) = in_fixed%Stokes_incident(1)
-            StokesM(3) = in_fixed%Stokes_incident(2)
-            StokesM(4) = in_fixed%Stokes_incident(3)
 
             if (in_fixed%use_atomic_pol == 1) then
 ! Emission                
