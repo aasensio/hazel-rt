@@ -17,7 +17,7 @@ contains
     type(type_slab) :: slab
     real(kind=8) :: output(0:3,in_fixed%no)
     integer :: i, iteration, loop_shell, error, j
-    real(kind=8) :: I0, Q0, U0, V0, ds, Imax, Ic, factor, eta0, psim, psi0
+    real(kind=8) :: I0, Q0, U0, V0, ds, Imax, Ic, factor, eta0
     real(kind=8) :: tolerance(2), vmacro
     real(kind=8), allocatable ::          &
       epsI(:), epsQ(:), epsU(:), epsV(:), &
@@ -27,8 +27,23 @@ contains
     real(kind=8), allocatable :: m1(:,:), m2(:,:), Stokes0(:)
     real(kind=8), allocatable :: O_evol(:,:), psi_matrix(:,:), J00(:), J20(:), J00_nu(:,:), J20_nu(:,:)
 
-    integer(kind=4) :: line, layer, angle, spectrum_size, begin_ind, end_ind, n_points, i_nu, save_nemiss
-    real(kind=8) :: mu, illumination_cone_cosine, illumination_cone_sine, cos_alpha, wavelength, v_los, d_nu_dopp, resolution, adamp, save_thetad, save_chid, save_gammad
+    integer(kind=4) :: line, layer, angle, spectrum_size, begin_ind, end_ind, n_points, i_nu, save_nemiss, k, km, kp, kto, kfrom, kstep
+    real(kind=8) :: &
+      mu, illumination_cone_cosine, illumination_cone_sine, cos_alpha, &
+      wavelength, v_los, d_nu_dopp, resolution, adamp, save_thetad, save_chid, save_gammad
+
+    ! A ray is considered horizontal it its mu is less than
+    real(kind=8), parameter :: horizontal_mu_limit = 0.01
+
+    logical :: is_horizontal_ray
+
+    ! Quantities for the formal solution.
+    real(kind=8), allocatable :: &
+      IQUV( :, : ), &
+      chim( : ), chi0( : ), chip( : ), dtm( : ), dtp( : ), exu( : ), &
+      sm( :, : ), s0( :, : ), sp( :, : ), &
+      ab_matrix( :, :, :, : ), source_vector( :, :, : )
+    real(kind=8) :: dm, dp, psim, psi0, psip, mat1( 4, 4 ), mat2( 4, 4 )
 
     ! ogpf
     type(gpf) :: gp
@@ -169,6 +184,20 @@ contains
 
       allocate( slab%propagation_matrix( 4, 4, slab%n_layers, spectrum_size, slab%aq_size ), source = 0d0 )
       allocate( slab%emission_vector(       4, slab%n_layers, spectrum_size, slab%aq_size ), source = 0d0 )
+
+      allocate( ab_matrix(     4, 4, slab%n_layers, spectrum_size ), source = 0d0 )
+      allocate( source_vector(    4, slab%n_layers, spectrum_size ), source = 0d0 )
+      allocate( IQUV(             4,                spectrum_size ), source = 0d0 )
+
+      allocate( chim(  spectrum_size ), source = 0d0 )
+      allocate( chi0(  spectrum_size ), source = 0d0 )
+      allocate( chip(  spectrum_size ), source = 0d0 )
+      allocate( dtm(   spectrum_size ), source = 0d0 )
+      allocate( dtp(   spectrum_size ), source = 0d0 )
+      allocate( exu(   spectrum_size ), source = 0d0 )
+      allocate( sm( 4, spectrum_size ), source = 0d0 )
+      allocate( s0( 4, spectrum_size ), source = 0d0 )
+      allocate( sp( 4, spectrum_size ), source = 0d0 )
 
       ! Initialize iterations
       tolerance = 100.d0
@@ -327,7 +356,7 @@ contains
           enddo ! line
 
           ! Scale the absorption matrix and the emission vector to physical
-          ! units by multiplying by the number density.
+          ! units multiplying them by the number density.
           slab%propagation_matrix( :, :, layer, :, : ) = slab%propagation_matrix( :, :, layer, :, : ) * slab%density( layer )
           slab%emission_vector(       :, layer, :, : ) = slab%emission_vector(       :, layer, :, : ) * slab%density( layer )
 
@@ -342,6 +371,129 @@ contains
         enddo ! layer
 
         ! Now solve the transfer equation and intergrate the radiation field tensors.
+        !=======================================================================
+        ! First, iterate angles as the last one will be the required LoS for the
+        ! intensity output.
+        do angle = 1, slab%aq_size
+
+          mu = cos( slab%aq_inclination( angle ) * PI / 180d0 )
+
+          is_horizontal_ray = .false.
+          if ( abs( mu ) <= horizontal_mu_limit ) then
+            is_horizontal_ray = .true.
+            ! The order doesn't matter here as all layers are not connected.
+            kfrom = 2
+            kto   = slab%n_layers
+            kstep = 1
+          else if ( mu > horizontal_mu_limit ) then
+            ! Going upwards.
+            kfrom = 2
+            kto   = slab%n_layers
+            kstep = 1
+          else ! mu < horizontal_mu_limit
+            ! Going downwards.
+            kfrom = slab%n_layers - 1
+            kto   = 1
+            kstep = -1
+          end if
+
+          ! Initialize with the boundary conditions.
+          IQUV( :, : ) = slab%boundary( :, :, angle )
+
+          ! Calculate J00 and J20
+          continue
+
+          ! Slice the absorption matrix and the emission vector for one angle
+          ! and reduce them both.
+          do i = 1, 4
+            do j = 1, 4
+              ! Normalize the absorption matrix \( \hat{K} \) by \( \eta_I \) to
+              ! get \( \hat{K}^* \)...
+              ab_matrix( i, j, :, : ) = slab%propagation_matrix( i, j, :, :, angle ) / slab%propagation_matrix( 1, 1, :, :, angle )
+            enddo
+            ! ... and remove the principal diagonal to get \( \hat{K}^\prime \).
+            ab_matrix( i, i, :, : ) = ab_matrix( i, i, :, : ) - 1d0
+            ! Normalize the emission vector by \( \eta_I \) as well.
+            source_vector( i, :, : ) = slab%emission_vector( i, :, :, angle ) / slab%propagation_matrix( 1, 1, :, :, angle )
+          enddo
+
+          do k = kfrom, kto, kstep
+
+            if ( is_horizontal_ray ) then
+              ! Asymptotic solution for the horizontal (infinite) ray:
+              ! \( \vec{I} = \hat{K}^{-1} \vec{\epsilon} \).
+              do i_nu = 1, spectrum_size
+                mat1 = slab%propagation_matrix( :, :, k, i_nu, angle )
+                write(*, *) 'i_nu = ', i_nu, ' norm mat1 = ', maxval( abs( mat1 ) )
+                call invert( mat1 )
+                IQUV( :, i_nu ) = matmul( mat1, slab%emission_vector( :, k, i_nu, angle ) )
+              enddo
+            else
+              ! Full formal solution.
+              if ( k == kto ) then
+                ! Linear short-characteristics at the boundary.
+                km = k - 1
+                chim(  : ) = slab%propagation_matrix( 1, 1, km, :, angle )
+                chi0(  : ) = slab%propagation_matrix( 1, 1, k,  :, angle )
+                chip(  : ) = 0d0
+                sm( :, : ) = source_vector( :, km, : )
+                s0( :, : ) = source_vector( :, k,  : )
+                sp( :, : ) = 0d0
+                dm = abs( ( slab%z( k ) - slab%z( km ) ) / mu )
+                dp = 0.d0
+              else
+                ! Parabolic short-characteristics inbetween.
+                km = k - 1
+                kp = k + 1
+                chim(  : ) = slab%propagation_matrix( 1, 1, km, :, angle )
+                chi0(  : ) = slab%propagation_matrix( 1, 1, k,  :, angle )
+                chip(  : ) = slab%propagation_matrix( 1, 1, kp, :, angle )
+                sm( :, : ) = source_vector( :, km, : )
+                s0( :, : ) = source_vector( :, k,  : )
+                sp( :, : ) = source_vector( :, kp, : )
+                dm = abs( ( slab%z( k  ) - slab%z( km ) ) / mu )
+                dp = abs( ( slab%z( kp ) - slab%z( k  ) ) / mu )
+              endif
+
+              dtm = 0.5d0 * dm * ( chim + chi0 ) 
+              dtp = 0.5d0 * dp * ( chi0 + chip ) 
+
+              where ( dtm >= 1d-4 )
+                exu = exp( -dtm )
+              else where
+                exu = ( dtm * 0.5d0 - 1d0 ) * dtm + 1d0
+              end where
+
+              do i_nu = 1, spectrum_size
+
+                call lin_sc( dtm( i_nu ), psim, psi0 )
+                mat1 = exu( i_nu ) * identity_4x4 - psim * ab_matrix( :, :, km, i_nu )
+                mat2 =               identity_4x4 + psi0 * ab_matrix( :, :, k,  i_nu )
+                call invert( mat2 )
+
+                if ( k == kto ) then
+                  ! Linear interpolation.
+                  !call lin_sc( dtm( i_nu ), psim, psi0 )
+                  IQUV( :, i_nu ) = matmul( mat2, matmul( mat1, IQUV( :, i_nu ) ) + psim * sm( :, i_nu ) + psi0 * s0( :, i_nu ) )
+                else
+                  ! Parabolic interpolation.
+                  call par_sc( dtm( i_nu ), dtp( i_nu ), psim, psi0, psip )
+                  IQUV( :, i_nu ) = matmul( mat2, matmul( mat1, IQUV( :, i_nu ) ) + psim * sm( :, i_nu ) + psi0 * s0( :, i_nu ) + psip * sp( :, i_nu ) )
+                endif
+
+              enddo ! i_nu
+            end if ! is_horizontal_ray
+
+            ! Increment J00 and J20
+            continue
+
+          enddo ! k, z-index of layers
+
+          !call gp%options( 'set style data linespoints; set grid; set key top left' )
+          !call gp%plot( [(i * 1d0, i = 1, 500)], IQUV ) ! 'lt 7'
+
+        enddo ! angle (RT FS)
+        !=======================================================================
 
       stop
       enddo ! iteration & tolerance
@@ -526,7 +678,10 @@ contains
         deallocate(J00)
         deallocate(J20)
         deallocate(prof)
-            
+
+      deallocate( slab%propagation_matrix, slab%emission_vector, IQUV )
+
+
     end subroutine do_transfer
 
 ! ---------------------------------------------------------
