@@ -417,6 +417,9 @@ contains
             source_vector( i, :, : ) = slab%emission_vector( i, :, :, angle ) / slab%propagation_matrix( 1, 1, :, :, angle )
           enddo
 
+          ! Integrate the transfer equation along all slabs using the method of
+          ! short characteristics of the DELO/DELOPAR kind with linear or
+          ! parabolic interpolation of the source function.
           do k = kfrom, kto, kstep
 
             if ( is_horizontal_ray ) then
@@ -424,7 +427,6 @@ contains
               ! \( \vec{I} = \hat{K}^{-1} \vec{\epsilon} \).
               do i_nu = 1, spectrum_size
                 mat1 = slab%propagation_matrix( :, :, k, i_nu, angle )
-                write(*, *) 'i_nu = ', i_nu, ' norm mat1 = ', maxval( abs( mat1 ) )
                 call invert( mat1 )
                 IQUV( :, i_nu ) = matmul( mat1, slab%emission_vector( :, k, i_nu, angle ) )
               enddo
@@ -432,7 +434,7 @@ contains
               ! Full formal solution.
               if ( k == kto ) then
                 ! Linear short-characteristics at the boundary.
-                km = k - 1
+                km = k - kstep
                 chim(  : ) = slab%propagation_matrix( 1, 1, km, :, angle )
                 chi0(  : ) = slab%propagation_matrix( 1, 1, k,  :, angle )
                 chip(  : ) = 0d0
@@ -443,8 +445,8 @@ contains
                 dp = 0.d0
               else
                 ! Parabolic short-characteristics inbetween.
-                km = k - 1
-                kp = k + 1
+                km = k - kstep
+                kp = k + kstep
                 chim(  : ) = slab%propagation_matrix( 1, 1, km, :, angle )
                 chi0(  : ) = slab%propagation_matrix( 1, 1, k,  :, angle )
                 chip(  : ) = slab%propagation_matrix( 1, 1, kp, :, angle )
