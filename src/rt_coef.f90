@@ -81,28 +81,47 @@ contains
       	enddo
       endif
 
-		if (.not.allocated(epsilon)) allocate(epsilon(0:3,in_fixed%no))
-		if (.not.allocated(epsilon_zeeman)) allocate(epsilon_zeeman(0:3,in_fixed%no))
-		if (.not.allocated(eta)) allocate(eta(0:3,in_fixed%no))
-		if (.not.allocated(eta_zeeman)) allocate(eta_zeeman(0:3,in_fixed%no))
-		if (.not.allocated(eta_stim)) allocate(eta_stim(0:3,in_fixed%no))
-		if (.not.allocated(eta_stim_zeeman)) allocate(eta_stim_zeeman(0:3,in_fixed%no))
-		if (.not.allocated(mag_opt)) allocate(mag_opt(0:3,in_fixed%no))
-		if (.not.allocated(mag_opt_zeeman)) allocate(mag_opt_zeeman(0:3,in_fixed%no))
-		if (.not.allocated(mag_opt_stim)) allocate(mag_opt_stim(0:3,in_fixed%no))
-		if (.not.allocated(mag_opt_stim_zeeman)) allocate(mag_opt_stim_zeeman(0:3,in_fixed%no))
-		
-		epsilon = 0.d0
-		epsilon_zeeman = 0.d0
-		eta = 0.d0
-		eta_zeeman = 0.d0
-		eta_stim = 0.d0
-		eta_stim_zeeman = 0.d0
-		
-		mag_opt = 0.d0
-		mag_opt_stim = 0.d0
-		mag_opt_zeeman = 0.d0
-		mag_opt_stim_zeeman = 0.d0
+    ! Reallocate all output arrays.
+    if ( allocated( epsilon ) ) then
+      deallocate( epsilon )
+    endif
+    allocate( epsilon( 0:3, in_fixed%no ), source = 0d0 )
+    if ( allocated( epsilon_zeeman ) ) then
+      deallocate( epsilon_zeeman )
+    endif
+    allocate( epsilon_zeeman( 0:3, in_fixed%no ), source = 0d0 )
+    if ( allocated( eta ) ) then
+      deallocate( eta )
+    endif
+    allocate( eta( 0:3, in_fixed%no ), source = 0d0 )
+    if ( allocated( eta_zeeman ) ) then
+      deallocate( eta_zeeman )
+    endif
+    allocate( eta_zeeman( 0:3, in_fixed%no ), source = 0d0 )
+    if ( allocated( eta_stim ) ) then
+      deallocate( eta_stim )
+    endif
+    allocate( eta_stim( 0:3, in_fixed%no ), source = 0d0 )
+    if ( allocated( eta_stim_zeeman ) ) then
+      deallocate( eta_stim_zeeman )
+    endif
+    allocate( eta_stim_zeeman( 0:3, in_fixed%no ), source = 0d0 )
+    if ( allocated( mag_opt ) ) then
+      deallocate( mag_opt )
+    endif
+    allocate( mag_opt( 0:3, in_fixed%no ), source = 0d0 )
+    if ( allocated( mag_opt_zeeman ) ) then
+      deallocate( mag_opt_zeeman )
+    endif
+    allocate( mag_opt_zeeman( 0:3, in_fixed%no ), source = 0d0 )
+    if ( allocated( mag_opt_stim ) ) then
+      deallocate( mag_opt_stim )
+    endif
+    allocate( mag_opt_stim( 0:3, in_fixed%no ), source = 0d0 )
+    if ( allocated( mag_opt_stim_zeeman ) ) then
+      deallocate( mag_opt_stim_zeeman )
+    endif
+    allocate( mag_opt_stim_zeeman( 0:3, in_fixed%no ), source = 0d0 )
 
     ! Get the Doppler width in Hz using Eq. (5.43) from the Book:
     ! \[
@@ -691,29 +710,12 @@ contains
 ! 				(eta_stim_zeeman(j,i),j=0,3), (mag_opt_zeeman(j,i),j=1,3), (mag_opt_stim_zeeman(j,i),j=1,3)
 ! 		enddo
 ! 		close(12)
-		
-		
-! Clean the allocated memory
-!		deallocate(njlevu)
-!		deallocate(njlevl)		
-!		deallocate(autl)
-!		deallocate(autu)
-!		deallocate(cl)
-!		deallocate(cu)
-!		deallocate(tmp)
-!		deallocate(red_freqs)
-!		deallocate(rot_mat_vert_mag)
-!		deallocate(prof)
-		
-!		deallocate(rhol)
-!		deallocate(rhou)
-!		deallocate(rhoml)
-!		deallocate(rhomu)
-		
-!		deallocate(epsilon)
-!		deallocate(eta)
-!		deallocate(epsilon_zeeman)
-!		deallocate(eta_zeeman)
-								
+
+    ! Clean the allocated memory
+    deallocate( njlevl, njlevu, autl, autu, cl, cu )
+    deallocate( rhol, rhou, rhoml, rhomu )
+    deallocate( rot_mat_vert_mag )
+    deallocate( red_freqs, tmp1, tmp2, prof )
+
 	end subroutine calc_rt_coef
 end module rt_coef

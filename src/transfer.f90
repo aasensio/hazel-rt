@@ -27,10 +27,12 @@ contains
     real(kind=8), allocatable :: m1(:,:), m2(:,:), Stokes0(:)
     real(kind=8), allocatable :: O_evol(:,:), psi_matrix(:,:), J00(:), J20(:), J00_nu(:,:), J20_nu(:,:)
 
-    integer(kind=4) :: line, layer, angle, spectrum_size, begin_ind, end_ind, n_points, f, save_nemiss, k, km, kp, kto, kfrom, kstep
+    integer(kind=4) :: &
+      line, layer, angle, spectrum_size, begin_f, end_f, n_points, f, save_nemiss, k, km, kp, kto, kfrom, kstep
     real(kind=8) :: &
       mu, illumination_cone_cosine, illumination_cone_sine, cos_alpha, &
-      wavelength, v_los, d_nu_dopp, resolution, adamp, save_thetad, save_chid, save_gammad
+      wavelength, v_los, d_nu_dopp, resolution, adamp, save_thetad, save_chid, save_gammad, &
+      eta_I
 
     ! A ray is considered horizontal it its mu is less than
     real(kind=8), parameter :: horizontal_mu_limit = 0.01
@@ -47,6 +49,7 @@ contains
 
     ! ogpf
     type(gpf) :: gp
+    character(len=4) :: tmp_str
 
       if ( verbose_mode == 1 ) then
           print *, 'Starting transfer...'
@@ -73,6 +76,7 @@ contains
         multiplets( line )%nus( 1:n_points )   = ( PC / 1d-8 ) / multiplets( line )%lambdas( 1:n_points )
         multiplets( line )%d_nus( 1:n_points ) = multiplets( line )%nus( 1:n_points ) - ( PC / 1d-8 / wavelength )
       enddo
+
 
       ! Create arrays for the current and the previous radiation field
       ! parameters, \( \bar{n} \) and \( \omega \), ...
@@ -125,9 +129,9 @@ contains
           cos_alpha = sqrt( mu**2 - illumination_cone_cosine**2 ) / illumination_cone_sine
           do line = 1, atom%ntran
             wavelength = multiplets( line )%wl
-            begin_ind  = multiplets( line )%begin
-            end_ind    = multiplets( line )%end
-            slab%boundary( 1, begin_ind:end_ind, angle ) = I0_allen( wavelength, cos_alpha )
+            begin_f    = multiplets( line )%begin
+            end_f      = multiplets( line )%end
+            slab%boundary( 1, begin_f:end_f, angle ) = I0_allen( wavelength, cos_alpha )
           enddo
         else
           ! For other angles there is no incoming boundary intensity and it is
@@ -154,13 +158,13 @@ contains
           adamp = slab%damping( layer )
           do line = 1, atom%ntran
             wavelength = multiplets( line )%wl
-            begin_ind  = multiplets( line )%begin
-            end_ind    = multiplets( line )%end
+            begin_f    = multiplets( line )%begin
+            end_f      = multiplets( line )%end
 
             ! The Doppler width in Hz.
             d_nu_dopp = slab%vthermal( layer ) * 1d5 / ( wavelength * 1d-8 )
 
-            slab%absorption_profile( layer, begin_ind:end_ind, angle ) = dble( &
+            slab%absorption_profile( layer, begin_f:end_f, angle ) = dble( &
                 profile( adamp, -multiplets( line )%d_nus / d_nu_dopp - v_los / slab%vthermal( layer ) ) &
                 / ( d_nu_dopp * SQRTPI ) &
               )
@@ -244,8 +248,8 @@ contains
             in_fixed%nemiss = line
 
             in_fixed%no       = multiplets( line )%no
-            begin_ind         = multiplets( line )%begin
-            end_ind           = multiplets( line )%end
+            begin_f           = multiplets( line )%begin
+            end_f             = multiplets( line )%end
             in_fixed%wl       = multiplets( line )%wl
             in_fixed%d_wl_min = multiplets( line )%d_wl_min
             in_fixed%d_wl_max = multiplets( line )%d_wl_max
@@ -275,7 +279,7 @@ contains
               ! Set the LoS angles to the current ray of the quadrature.
               in_fixed%thetad = slab%aq_inclination( angle )
               in_fixed%chid   = slab%aq_azimuth(     angle )
-              in_fixed%gammad = in_fixed%gammad ! TODO: not clear what should be here.
+              !in_fixed%gammad = in_fixed%gammad ! TODO: not clear what should be here.
 
               ! Set the LoS velocity: the reversed projection of v_z along the
               ! current LoS.
@@ -337,12 +341,12 @@ contains
 
               ! TODO: Replace this with the inline code, subroutine calls are slow for each frequency.
               do f = 1, in_fixed%no
-                call fill_absorption_matrix( slab%propagation_matrix( :, :, layer, begin_ind + f - 1, angle ), etaI( f ), etaQ( f ), etaU( f ), etaV( f ), rhoQ( f ), rhoU( f ), rhoV( f ) )
+                call fill_absorption_matrix( slab%propagation_matrix( :, :, layer, begin_f + f - 1, angle ), etaI( f ), etaQ( f ), etaU( f ), etaV( f ), rhoQ( f ), rhoU( f ), rhoV( f ) )
               enddo
-              slab%emission_vector( 1, layer, begin_ind:end_ind, angle ) = epsI
-              slab%emission_vector( 2, layer, begin_ind:end_ind, angle ) = epsQ
-              slab%emission_vector( 3, layer, begin_ind:end_ind, angle ) = epsU
-              slab%emission_vector( 4, layer, begin_ind:end_ind, angle ) = epsV
+              slab%emission_vector( 1, layer, begin_f:end_f, angle ) = epsI
+              slab%emission_vector( 2, layer, begin_f:end_f, angle ) = epsQ
+              slab%emission_vector( 3, layer, begin_f:end_f, angle ) = epsU
+              slab%emission_vector( 4, layer, begin_f:end_f, angle ) = epsV
 
             enddo ! angle
 
@@ -403,19 +407,34 @@ contains
           ! Calculate J00 and J20
           continue
 
+!          ! Slice the absorption matrix and the emission vector for one angle
+!          ! and reduce them both.
+!          do i = 1, 4
+!            do j = 1, 4
+!              ! Normalize the absorption matrix \( \hat{K} \) by \( \eta_I \) to
+!              ! get \( \hat{K}^* \)...
+!              ab_matrix( i, j, :, : ) = slab%propagation_matrix( i, j, :, :, angle ) / slab%propagation_matrix( 1, 1, :, :, angle )
+!            enddo
+!            ! ... and remove the principal diagonal to get \( \hat{K}^\prime \).
+!            ab_matrix( i, i, :, : ) = ab_matrix( i, i, :, : ) - 1d0
+!            ! Normalize the emission vector by \( \eta_I \) as well.
+!            source_vector( i, :, : ) = slab%emission_vector( i, :, :, angle ) / slab%propagation_matrix( 1, 1, :, :, angle )
+!          enddo
           ! Slice the absorption matrix and the emission vector for one angle
           ! and reduce them both.
-          do i = 1, 4
-            do j = 1, 4
+          ab_matrix(     :, :, :, : ) = slab%propagation_matrix( :, :, :, :, angle )
+          source_vector(    :, :, : ) = slab%emission_vector(       :, :, :, angle )
+          do f = 1, spectrum_size
+            do k = 1, slab%n_layers
+              eta_I = ab_matrix( 1, 1, k, f )
               ! Normalize the absorption matrix \( \hat{K} \) by \( \eta_I \) to
-              ! get \( \hat{K}^* \)...
-              ab_matrix( i, j, :, : ) = slab%propagation_matrix( i, j, :, :, angle ) / slab%propagation_matrix( 1, 1, :, :, angle )
-            enddo
-            ! ... and remove the principal diagonal to get \( \hat{K}^\prime \).
-            ab_matrix( i, i, :, : ) = ab_matrix( i, i, :, : ) - 1d0
-            ! Normalize the emission vector by \( \eta_I \) as well.
-            source_vector( i, :, : ) = slab%emission_vector( i, :, :, angle ) / slab%propagation_matrix( 1, 1, :, :, angle )
-          enddo
+              ! get \( \hat{K}^* \) and remove the principal diagonal to get
+              ! \( \hat{K}^\prime \).
+              ab_matrix(  :, :, k, f ) = ab_matrix(  :, :, k, f ) / eta_I - identity_4x4
+              ! Normalize the emission vector by \( \eta_I \) as well.
+              source_vector( :, k, f ) = source_vector( :, k, f ) / eta_I
+            end do ! 1 <= k <= slab%n_layers
+          end do ! 1 <= f <= spectrum_size
 
           ! Integrate the transfer equation along all slabs using the method of
           ! short characteristics of the DELO/DELOPAR kind with linear or
@@ -492,12 +511,17 @@ contains
           enddo ! k, z-index of layers
 
           ! Normalize IQUV
-          IQUV( 2, 1:200 ) = IQUV( 2, 1:200 ) / IQUV( 2, 1 )
-          IQUV( 3, 1:200 ) = IQUV( 3, 1:200 ) / IQUV( 3, 1 )
-          IQUV( 4, 1:200 ) = IQUV( 4, 1:200 ) / IQUV( 4, 1 )
-          IQUV( 1, 1:200 ) = IQUV( 1, 1:200 ) / IQUV( 1, 1 )
-          call gp%options( 'set style data linespoints; set grid; set key top left; set colorsequence classic' )
-          call gp%plot( [(i * 1d0, i = 1, 200)], transpose( IQUV( 1:4, 1:200 ) ) ) ! , 
+          if ( mu > horizontal_mu_limit ) then
+            write(*, *) angle, mu, maxval( IQUV( 1, 1:200 ) )
+            IQUV( 2, 1:200 ) = IQUV( 2, 1:200 ) / IQUV( 2, 1 )
+            IQUV( 3, 1:200 ) = IQUV( 3, 1:200 ) / IQUV( 3, 1 )
+            IQUV( 4, 1:200 ) = IQUV( 4, 1:200 ) / IQUV( 4, 1 )
+            IQUV( 1, 1:200 ) = IQUV( 1, 1:200 ) / IQUV( 1, 1 )
+            call gp%options( 'set style data linespoints; set grid; set key top left; set colorsequence classic' )
+            write(tmp_str, '(i4)') angle
+            call gp%title( 'angle = ' // tmp_str  )
+            call gp%plot( [(i * 1d0, i = 1, 200)], transpose( IQUV( 1:4, 1:200 ) ) )
+          endif
 
         enddo ! angle (RT FS)
         !=======================================================================
