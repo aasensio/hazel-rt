@@ -27,7 +27,7 @@ contains
     real(kind=8), allocatable :: m1(:,:), m2(:,:), Stokes0(:)
     real(kind=8), allocatable :: O_evol(:,:), psi_matrix(:,:), J00(:), J20(:), J00_nu(:,:), J20_nu(:,:)
 
-    integer(kind=4) :: line, layer, angle, spectrum_size, begin_ind, end_ind, n_points, i_nu, save_nemiss, k, km, kp, kto, kfrom, kstep
+    integer(kind=4) :: line, layer, angle, spectrum_size, begin_ind, end_ind, n_points, f, save_nemiss, k, km, kp, kto, kfrom, kstep
     real(kind=8) :: &
       mu, illumination_cone_cosine, illumination_cone_sine, cos_alpha, &
       wavelength, v_los, d_nu_dopp, resolution, adamp, save_thetad, save_chid, save_gammad
@@ -66,7 +66,7 @@ contains
         allocate( multiplets( line )%d_nus(     n_points ), source = 0d0 )
 
         ! Set an equidistant wavelength grid.
-        multiplets( line )%d_lambdas( 1:n_points ) = [ (i_nu, i_nu = 0, n_points - 1) ] * resolution + multiplets( line )%d_wl_min
+        multiplets( line )%d_lambdas( 1:n_points ) = [ (f, f = 0, n_points - 1) ] * resolution + multiplets( line )%d_wl_min
         multiplets( line )%lambdas(   1:n_points ) = multiplets( line )%d_lambdas( 1:n_points ) + wavelength
 
         ! Convert Ångströms to cm with a factor of 10^{-8} to get Hz.
@@ -336,8 +336,8 @@ contains
               endif ! use_atomic_pol
 
               ! TODO: Replace this with the inline code, subroutine calls are slow for each frequency.
-              do i_nu = 1, in_fixed%no
-                call fill_absorption_matrix( slab%propagation_matrix( :, :, layer, begin_ind + i_nu - 1, angle ), etaI( i_nu ), etaQ( i_nu ), etaU( i_nu ), etaV( i_nu ), rhoQ( i_nu ), rhoU( i_nu ), rhoV( i_nu ) )
+              do f = 1, in_fixed%no
+                call fill_absorption_matrix( slab%propagation_matrix( :, :, layer, begin_ind + f - 1, angle ), etaI( f ), etaQ( f ), etaU( f ), etaV( f ), rhoQ( f ), rhoU( f ), rhoV( f ) )
               enddo
               slab%emission_vector( 1, layer, begin_ind:end_ind, angle ) = epsI
               slab%emission_vector( 2, layer, begin_ind:end_ind, angle ) = epsQ
@@ -425,10 +425,10 @@ contains
             if ( is_horizontal_ray ) then
               ! Asymptotic solution for the horizontal (infinite) ray:
               ! \( \vec{I} = \hat{K}^{-1} \vec{\epsilon} \).
-              do i_nu = 1, spectrum_size
-                mat1 = slab%propagation_matrix( :, :, k, i_nu, angle )
+              do f = 1, spectrum_size
+                mat1 = slab%propagation_matrix( :, :, k, f, angle )
                 call invert( mat1 )
-                IQUV( :, i_nu ) = matmul( mat1, slab%emission_vector( :, k, i_nu, angle ) )
+                IQUV( :, f ) = matmul( mat1, slab%emission_vector( :, k, f, angle ) )
               enddo
             else
               ! Full formal solution.
@@ -466,24 +466,24 @@ contains
                 exu = ( dtm * 0.5d0 - 1d0 ) * dtm + 1d0
               end where
 
-              do i_nu = 1, spectrum_size
+              do f = 1, spectrum_size
 
-                call lin_sc( dtm( i_nu ), psim, psi0 )
-                mat1 = exu( i_nu ) * identity_4x4 - psim * ab_matrix( :, :, km, i_nu )
-                mat2 =               identity_4x4 + psi0 * ab_matrix( :, :, k,  i_nu )
+                call lin_sc( dtm( f ), psim, psi0 )
+                mat1 = exu( f ) * identity_4x4 - psim * ab_matrix( :, :, km, f )
+                mat2 =               identity_4x4 + psi0 * ab_matrix( :, :, k,  f )
                 call invert( mat2 )
 
                 if ( k == kto ) then
                   ! Linear interpolation.
-                  !call lin_sc( dtm( i_nu ), psim, psi0 )
-                  IQUV( :, i_nu ) = matmul( mat2, matmul( mat1, IQUV( :, i_nu ) ) + psim * sm( :, i_nu ) + psi0 * s0( :, i_nu ) )
+                  !call lin_sc( dtm( f ), psim, psi0 )
+                  IQUV( :, f ) = matmul( mat2, matmul( mat1, IQUV( :, f ) ) + psim * sm( :, f ) + psi0 * s0( :, f ) )
                 else
                   ! Parabolic interpolation.
-                  call par_sc( dtm( i_nu ), dtp( i_nu ), psim, psi0, psip )
-                  IQUV( :, i_nu ) = matmul( mat2, matmul( mat1, IQUV( :, i_nu ) ) + psim * sm( :, i_nu ) + psi0 * s0( :, i_nu ) + psip * sp( :, i_nu ) )
+                  call par_sc( dtm( f ), dtp( f ), psim, psi0, psip )
+                  IQUV( :, f ) = matmul( mat2, matmul( mat1, IQUV( :, f ) ) + psim * sm( :, f ) + psi0 * s0( :, f ) + psip * sp( :, f ) )
                 endif
 
-              enddo ! i_nu
+              enddo ! f
             end if ! is_horizontal_ray
 
             ! Increment J00 and J20
@@ -491,8 +491,13 @@ contains
 
           enddo ! k, z-index of layers
 
-          !call gp%options( 'set style data linespoints; set grid; set key top left' )
-          !call gp%plot( [(i * 1d0, i = 1, 500)], IQUV ) ! 'lt 7'
+          ! Normalize IQUV
+          IQUV( 2, 1:200 ) = IQUV( 2, 1:200 ) / IQUV( 2, 1 )
+          IQUV( 3, 1:200 ) = IQUV( 3, 1:200 ) / IQUV( 3, 1 )
+          IQUV( 4, 1:200 ) = IQUV( 4, 1:200 ) / IQUV( 4, 1 )
+          IQUV( 1, 1:200 ) = IQUV( 1, 1:200 ) / IQUV( 1, 1 )
+          call gp%options( 'set style data linespoints; set grid; set key top left; set colorsequence classic' )
+          call gp%plot( [(i * 1d0, i = 1, 200)], transpose( IQUV( 1:4, 1:200 ) ) ) ! , 
 
         enddo ! angle (RT FS)
         !=======================================================================
