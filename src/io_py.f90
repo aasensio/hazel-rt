@@ -139,7 +139,7 @@ contains
 			if (in_fixed%use_atomic_pol == 0) then
 				write(*,FMT='(A)') ' Neglecting atomic polarization'
 			endif
-			if (in_fixed%use_atomic_pol == 2) then
+			if (in_fixed%use_atomic_pol == -1) then
 				write(*,FMT='(A)') ' Neglecting anisotropy'
 			endif
 		endif		
@@ -683,7 +683,7 @@ contains
 		write(13,FMT='(I1)') in_fixed%nemiss
 		write(13,*)
 		
-		write(13,FMT='(A)') '# Use atomic polarization? (0-> no, 1-> yes)'
+		write(13,FMT='(A)') '# Atomic polarization? (-1 -> neglect only anisotropy, 0 -> neglect, 1 -> include)'
 		write(13,FMT='(I1)') in_fixed%use_atomic_pol
 		write(13,*)
 		

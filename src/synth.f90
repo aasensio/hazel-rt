@@ -119,7 +119,7 @@ contains
 ! Only emission
 !****************
         if (synthesis_mode == 0) then
-            if (in_fixed%use_atomic_pol == 1 .or. in_fixed%use_atomic_pol == -1) then
+            if ( abs( in_fixed%use_atomic_pol ) == 1 ) then
                 Imax = maxval(epsilon(0,:))
                 do i = 0, 3
                     output(i,:) = epsilon(i,:) / Imax
@@ -152,7 +152,7 @@ contains
             ! U0 = in_fixed%Stokes_incident(2)
             ! V0 = in_fixed%Stokes_incident(3)
                         
-            if (in_fixed%use_atomic_pol == 1 .or. in_fixed%use_atomic_pol == -1) then
+            if ( abs( in_fixed%use_atomic_pol ) == 1 ) then
                 epsI = epsilon(0,:)
                 epsQ = epsilon(1,:)
                 epsU = epsilon(2,:)
@@ -238,7 +238,7 @@ contains
                 call calc_rt_coef(in_params, in_fixed, in_observation, 2)
 
 
-                if (in_fixed%use_atomic_pol == 1 .or. in_fixed%use_atomic_pol == -1) then
+                if ( abs( in_fixed%use_atomic_pol ) == 1 ) then
                     epsI = epsilon(0,:)
                     epsQ = epsilon(1,:)
                     epsU = epsilon(2,:)
@@ -335,7 +335,7 @@ contains
             if (.not.allocated(dtau)) allocate(dtau(in_fixed%no))
                         
                         
-            if (in_fixed%use_atomic_pol == 1 .or. in_fixed%use_atomic_pol == -1) then
+            if ( abs( in_fixed%use_atomic_pol ) == 1 ) then
                 epsI = epsilon(0,:)
                 epsQ = epsilon(1,:)
                 epsU = epsilon(2,:)
@@ -468,7 +468,7 @@ contains
             ! StokesM(3) = in_fixed%Stokes_incident(2)
             ! StokesM(4) = in_fixed%Stokes_incident(3)
                         
-            if (in_fixed%use_atomic_pol == 1 .or. in_fixed%use_atomic_pol == -1) then
+            if ( abs( in_fixed%use_atomic_pol ) == 1 ) then
 ! Emission              
                 epsI = epsilon(0,:)
                 epsQ = epsilon(1,:)
@@ -597,7 +597,7 @@ contains
 ! Calculate the absorption/emission coefficients for a given transition
                 call calc_rt_coef(in_params, in_fixed, in_observation, 2)
 
-                if (in_fixed%use_atomic_pol == 1 .or. in_fixed%use_atomic_pol == -1) then
+                if ( abs( in_fixed%use_atomic_pol ) == 1 ) then
 ! Emission              
                     epsI = epsilon(0,:)
                     epsQ = epsilon(1,:)
@@ -723,7 +723,7 @@ contains
             U0 = in_fixed%Stokes_incident(2)
             V0 = in_fixed%Stokes_incident(3)
                         
-            if (in_fixed%use_atomic_pol == 1 .or. in_fixed%use_atomic_pol == -1) then
+            if ( abs( in_fixed%use_atomic_pol ) == 1 ) then
                 epsI = epsilon(0,:)
                 epsQ = epsilon(1,:)
                 epsU = epsilon(2,:)
@@ -829,7 +829,7 @@ contains
 ! Calculate the absorption/emission coefficients for a given transition
                 call calc_rt_coef(in_params, in_fixed, in_observation, 2)
 
-                if (in_fixed%use_atomic_pol == 1 .or. in_fixed%use_atomic_pol == -1) then
+                if ( abs( in_fixed%use_atomic_pol ) == 1 ) then
                     epsI = epsilon(0,:)
                     epsQ = epsilon(1,:)
                     epsU = epsilon(2,:)
@@ -927,7 +927,7 @@ contains
             ! StokesM(4) = in_fixed%Stokes_incident(3)
 
                         
-            if (in_fixed%use_atomic_pol == 1 .or. in_fixed%use_atomic_pol == -1) then
+            if ( abs( in_fixed%use_atomic_pol ) == 1 ) then
 ! Emission              
                 epsI = epsilon(0,:)
                 epsQ = epsilon(1,:)
@@ -1062,7 +1062,7 @@ contains
 ! Calculate the absorption/emission coefficients for a given transition
                 call calc_rt_coef(in_params, in_fixed, in_observation, 2)
 
-                if (in_fixed%use_atomic_pol == 1 .or. in_fixed%use_atomic_pol == -1) then
+                if ( abs( in_fixed%use_atomic_pol ) == 1 ) then
     ! Emission              
                     epsI = epsilon(0,:)
                     epsQ = epsilon(1,:)

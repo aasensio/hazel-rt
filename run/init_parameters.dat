@@ -39,7 +39,7 @@
 # Transition where to compute the emergent Stokes profiles
 1
 
-# Include atomic level polarization? (0-> no, 1-> yes)
+# Atomic level polarization? (-1 -> neglect only anisotropy, 0-> neglect, 1-> include)
 1
 
 # Observation angle with respect to the local solar vertical theta,chi,gamma [degrees]

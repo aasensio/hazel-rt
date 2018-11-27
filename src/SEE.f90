@@ -52,10 +52,8 @@ contains
                 w = omegaExternal(nt)
             endif
 
-! Neglect the influence of anisotropy
-            if (in_fixed%use_atomic_pol == -1) then
-                w = 0.d0                
-            endif
+            ! Neglect the influence of anisotropy
+            if ( in_fixed%use_atomic_pol == -1 ) w = 0d0
 
             aesto(nt) = atom%ae(nt)
             ntlsto(nt) = atom%nterml(nt)

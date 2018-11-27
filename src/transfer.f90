@@ -145,7 +145,8 @@ contains
 
 
       ! Generate the absorption profile.
-      allocate( slab%absorption_profile( slab%n_layers, spectrum_size, slab%aq_size ), source = 0d0 )
+      allocate( slab%absorption_profile(      slab%n_layers, spectrum_size, slab%aq_size ), source = 0d0 )
+      !allocate( slab%absorption_profile_norm( slab%n_layers,    atom%ntran, slab%aq_size ), source = 0d0 )
 
       do angle = 1, slab%aq_size
         do layer = 1, slab%n_layers
@@ -164,13 +165,19 @@ contains
             ! The Doppler width in Hz.
             d_nu_dopp = slab%vthermal( layer ) * 1d5 / ( wavelength * 1d-8 )
 
+            ! Calculate the profile
             slab%absorption_profile( layer, begin_f:end_f, angle ) = dble( &
                 profile( adamp, -multiplets( line )%d_nus / d_nu_dopp - v_los / slab%vthermal( layer ) ) &
                 / ( d_nu_dopp * SQRTPI ) &
               )
-          enddo
-        enddo
-      enddo
+
+            ! Calculate the norm of the (incomplete) profile.
+            !slab%absorption_profile_norm( layer, line, angle ) = &
+            !  int_tabulated(  )
+          end do ! 1 <= line <= atom%ntran
+        end do ! 1 <= layer <= slab%n_layers
+      end do ! 1 <= angle <= slab%aq_size
+      stop
 
       !allocate(slab%tau(slab%n_layers,in_fixed%no))
 
@@ -295,7 +302,7 @@ contains
               !  mag_opt_stim  mag_opt_stim_zeeman
 
               ! Collect the elements of the absorption matrix and the emision vector.
-              if (in_fixed%use_atomic_pol == 1) then
+              if ( abs( in_fixed%use_atomic_pol ) == 1 ) then
                 ! Emission
                 epsI = epsilon( 0, : )
                 epsQ = epsilon( 1, : )
@@ -407,19 +414,6 @@ contains
           ! Calculate J00 and J20
           continue
 
-!          ! Slice the absorption matrix and the emission vector for one angle
-!          ! and reduce them both.
-!          do i = 1, 4
-!            do j = 1, 4
-!              ! Normalize the absorption matrix \( \hat{K} \) by \( \eta_I \) to
-!              ! get \( \hat{K}^* \)...
-!              ab_matrix( i, j, :, : ) = slab%propagation_matrix( i, j, :, :, angle ) / slab%propagation_matrix( 1, 1, :, :, angle )
-!            enddo
-!            ! ... and remove the principal diagonal to get \( \hat{K}^\prime \).
-!            ab_matrix( i, i, :, : ) = ab_matrix( i, i, :, : ) - 1d0
-!            ! Normalize the emission vector by \( \eta_I \) as well.
-!            source_vector( i, :, : ) = slab%emission_vector( i, :, :, angle ) / slab%propagation_matrix( 1, 1, :, :, angle )
-!          enddo
           ! Slice the absorption matrix and the emission vector for one angle
           ! and reduce them both.
           ab_matrix(     :, :, :, : ) = slab%propagation_matrix( :, :, :, :, angle )
@@ -511,26 +505,26 @@ contains
           enddo ! k, z-index of layers
 
           ! Normalize IQUV
-          if ( mu > horizontal_mu_limit ) then
-            write(*, *) angle, mu, maxval( IQUV( 1, 1:200 ) )
-            IQUV( 2, 1:200 ) = IQUV( 2, 1:200 ) / maxval( IQUV( 1, 1:200 ) )
-            IQUV( 3, 1:200 ) = IQUV( 3, 1:200 ) / maxval( IQUV( 1, 1:200 ) )
-            IQUV( 4, 1:200 ) = IQUV( 4, 1:200 ) / maxval( IQUV( 1, 1:200 ) )
-            IQUV( 1, 1:200 ) = IQUV( 1, 1:200 ) / maxval( IQUV( 1, 1:200 ) )
-            IQUV( 1:4, 1:200 ) = IQUV( 1:4, 1:200 ) * 1d2
-            call gp%options( 'set style data linespoints; set grid; set key top left; set colorsequence classic' )
-            call gp%options( 'set xrange[-1.1:2.2];' )
-            !write(tmp_str, '(i4)') angle
-            !call gp%title( 'angle = ' // tmp_str  )
-            call gp%title( 'I/I_max'  )
-            call gp%plot( multiplets(1)%d_lambdas, IQUV( 1, 1:200 ) )
-            call gp%title( 'Q/I_max'  )
-            call gp%plot( multiplets(1)%d_lambdas, IQUV( 2, 1:200 ) )
-            call gp%title( 'U/I_max'  )
-            call gp%plot( multiplets(1)%d_lambdas, IQUV( 3, 1:200 ) )
-            call gp%title( 'V/I_max'  )
-            call gp%plot( multiplets(1)%d_lambdas, IQUV( 4, 1:200 ) )
-          endif
+          !if ( mu > horizontal_mu_limit ) then
+          !  write(*, *) angle, mu, maxval( IQUV( 1, 1:200 ) )
+          !  IQUV( 2, 1:200 ) = IQUV( 2, 1:200 ) / maxval( IQUV( 1, 1:200 ) )
+          !  IQUV( 3, 1:200 ) = IQUV( 3, 1:200 ) / maxval( IQUV( 1, 1:200 ) )
+          !  IQUV( 4, 1:200 ) = IQUV( 4, 1:200 ) / maxval( IQUV( 1, 1:200 ) )
+          !  IQUV( 1, 1:200 ) = IQUV( 1, 1:200 ) / maxval( IQUV( 1, 1:200 ) )
+          !  IQUV( 1:4, 1:200 ) = IQUV( 1:4, 1:200 ) * 1d2
+          !  call gp%options( 'set style data linespoints; set grid; set key top left; set colorsequence classic' )
+          !  call gp%options( 'set xrange[-1.1:2.2];' )
+          !  write(tmp_str, '(i4)') angle
+          !  call gp%title( 'angle = ' // tmp_str  )
+          !  call gp%plot( multiplets(1)%d_lambdas, transpose( IQUV( 1:4, 1:200 ) ) )
+          !  !call gp%title( 'I/I_max'  )
+          !  !call gp%title( 'Q/I_max'  )
+          !  !call gp%plot( multiplets(1)%d_lambdas, IQUV( 2, 1:200 ) )
+          !  !call gp%title( 'U/I_max'  )
+          !  !call gp%plot( multiplets(1)%d_lambdas, IQUV( 3, 1:200 ) )
+          !  !call gp%title( 'V/I_max'  )
+          !  !call gp%plot( multiplets(1)%d_lambdas, IQUV( 4, 1:200 ) )
+          !endif
 
         enddo ! angle (RT FS)
         !=======================================================================
@@ -545,10 +539,6 @@ contains
             J20 = 0.d0
             J00_nu = 0.d0
             J20_nu = 0.d0
-
-! Generate line profile
-            d_nu_dopp = in_params%vdopp*1.d5 / (in_fixed%wl*1.d-8)
-            prof = profile(in_params%damping,in_observation%freq / d_nu_dopp) / (d_nu_dopp*SQRTPI)
 
 ! Solve the RT equation and calculate the tensors J00 and J20
             do i = 1, in_fixed%no
