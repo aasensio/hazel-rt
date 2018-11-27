@@ -32,7 +32,7 @@ contains
     real(kind=8) :: &
       mu, illumination_cone_cosine, illumination_cone_sine, cos_alpha, &
       wavelength, v_los, d_nu_dopp, resolution, adamp, save_thetad, save_chid, save_gammad, &
-      eta_I
+      eta_I, cos_2gamma, sin_2gamma
 
     ! A ray is considered horizontal it its mu is less than
     real(kind=8), parameter :: horizontal_mu_limit = 0.01
@@ -45,7 +45,8 @@ contains
       chim( : ), chi0( : ), chip( : ), dtm( : ), dtp( : ), exu( : ), &
       sm( :, : ), s0( :, : ), sp( :, : ), &
       ab_matrix( :, :, :, : ), source_vector( :, :, : ), &
-      tau_nu( : ), tau( : )
+      tau_nu( : ), tau( : ), &
+      Ibar00( : ), Ibar20( : )
     real(kind=8) :: dm, dp, psim, psi0, psip, mat1( 4, 4 ), mat2( 4, 4 )
 
     ! ogpf
@@ -81,10 +82,10 @@ contains
 
       ! Create arrays for the current and the previous radiation field
       ! parameters, \( \bar{n} \) and \( \omega \), ...
-      allocate( slab%nbar(      slab%n_layers, atom%ntran ), source = 0d0 )
-      allocate( slab%omega(     slab%n_layers, atom%ntran ), source = 0d0 )
-      allocate( slab%nbar_old(  slab%n_layers, atom%ntran ), source = 0d0 )
-      allocate( slab%omega_old( slab%n_layers, atom%ntran ), source = 0d0 )
+      allocate( slab%nbar(      atom%ntran, slab%n_layers ), source = 0d0 )
+      allocate( slab%omega(     atom%ntran, slab%n_layers ), source = 0d0 )
+      allocate( slab%nbar_old(  atom%ntran, slab%n_layers ), source = 0d0 )
+      allocate( slab%omega_old( atom%ntran, slab%n_layers ), source = 0d0 )
 
       ! ...and initialize the current nbar and omega in all layers with the same
       ! values using Allen's tables to start iterating.
@@ -94,10 +95,10 @@ contains
       do line = 1, atom%ntran
         wavelength = atom%wavelength( line )
         ! Same value for different layers.
-        slab%nbar(  :, line ) = nbar_allen(  wavelength, in_fixed, in_params, atom%reduction_factor(       line ) )
-        slab%omega( :, line ) = omega_allen( wavelength, in_fixed, in_params, atom%reduction_factor_omega( line ) )
+        slab%nbar(  line, : ) = nbar_allen(  wavelength, in_fixed, in_params, atom%reduction_factor(       line ) )
+        slab%omega( line, : ) = omega_allen( wavelength, in_fixed, in_params, atom%reduction_factor_omega( line ) )
         if ( verbose_mode == 1 ) then
-          write (*, '(4x, a, f9.3, 2(a, e8.2))') 'wavelength = ', wavelength, ' A, nbar = ', slab%nbar( 1, line ), ', omega = ', slab%omega( 1, line )
+          write (*, '(4x, a, f9.3, 2(a, e8.2))') 'wavelength = ', wavelength, ' A, nbar = ', slab%nbar( line, 1 ), ', omega = ', slab%omega( line, 1 )
         endif
       enddo
       ! Set the previous values to the current ones.
@@ -207,10 +208,10 @@ contains
       allocate( tau_nu( spectrum_size ), source = 0d0 )
       allocate( tau( atom%ntran ), source = 0d0 )
 
-      !allocate(J00_nu(slab%n_layers,in_fixed%no))
-      !allocate(J20_nu(slab%n_layers,in_fixed%no))
-      !allocate(J00(slab%n_layers))
-      !allocate(J20(slab%n_layers))
+      allocate( Ibar00( spectrum_size ), source = 0d0 )
+      allocate( Ibar20( spectrum_size ), source = 0d0 )
+      allocate( slab%Jbar00( atom%ntran, slab%n_layers ), source = 0d0 )
+      allocate( slab%Jbar20( atom%ntran, slab%n_layers ), source = 0d0 )
 
       ! Initialize iterations
       tolerance = 100.d0
@@ -234,8 +235,8 @@ contains
           in_params%chibd   = slab%chiB( layer )
 
           ! ...pass the new nbar and omega in the current layer.
-          nbarExternal  = slab%nbar(  layer, : )
-          omegaExternal = slab%omega( layer, : )
+          nbarExternal  = slab%nbar(  :, layer )
+          omegaExternal = slab%omega( :, layer )
 
 
           ! For the first component only...
@@ -383,6 +384,9 @@ contains
 
         enddo ! layer
 
+        slab%Jbar00( :, : ) = 0d0
+        slab%Jbar20( :, : ) = 0d0
+
         ! Now solve the transfer equation and intergrate the radiation field tensors.
         !=======================================================================
         ! First, iterate angles as the last one will be the required LoS for the
@@ -390,6 +394,8 @@ contains
         do angle = 1, slab%aq_size
 
           mu = cos( slab%aq_inclination( angle ) * PI / 180d0 )
+          cos_2gamma = cos( 2d0 * in_fixed%gammad * PI / 180d0 )
+          sin_2gamma = sin( 2d0 * in_fixed%gammad * PI / 180d0 )
 
           is_horizontal_ray = .false.
           if ( abs( mu ) <= horizontal_mu_limit ) then
@@ -417,8 +423,20 @@ contains
           tau_nu( : ) = 0d0
           tau( : )    = 0d0
 
-          ! Calculate J00 and J20
-          continue
+          ! Get the radiation field tensors.  For the current ray, find
+          ! I^0_0( \nu, \Omega ) phi( \nu, \Omega ) and
+          ! I^2_0( \nu, \Omega ) phi( \nu, \Omega ) contributions...
+          Ibar00( : ) = IQUV( 1, : ) * slab%absorption_profile( kfrom - kstep, :, angle )
+          Ibar20( : ) = 2d0**(-1.5d0) * ( ( 3d0 * mu**2 - 1d0 ) * IQUV( 1, : ) - 3d0 * ( 1d0 - mu**2 ) * ( cos_2gamma * IQUV( 2, : ) - sin_2gamma * IQUV( 3, : ) ) ) * slab%absorption_profile( kfrom - kstep, :, angle )
+          ! ... and increment the corresponding Jbar tensors.
+          do line = 1, atom%ntran
+            begin_f = multiplets( line )%begin
+            end_f   = multiplets( line )%end
+            slab%Jbar00( line, kfrom - kstep ) = slab%Jbar00( line, kfrom - kstep ) &
+              + ( slab%aq_weight( angle ) / slab%absorption_profile_norm( kfrom - kstep, line, angle ) ) * int_tabulated( -multiplets( line )%d_nus, Ibar00( begin_f:end_f ) ) 
+            slab%Jbar20( line, kfrom - kstep ) = slab%Jbar20( line, kfrom - kstep ) &
+              + ( slab%aq_weight( angle ) / slab%absorption_profile_norm( kfrom - kstep, line, angle ) ) * int_tabulated( -multiplets( line )%d_nus, Ibar20( begin_f:end_f ) ) 
+          end do ! 1 <= line <= atom%ntran
 
           ! Slice the absorption matrix and the emission vector for one angle
           ! and reduce them both.
@@ -508,8 +526,20 @@ contains
               enddo ! 1 <= f <= spectrum_size
             end if ! is_horizontal_ray
 
-            ! Increment J00 and J20
-            continue
+            ! Get the radiation field tensors.  For the current ray, find
+            ! I^0_0( \nu, \Omega ) phi( \nu, \Omega ) and
+            ! I^2_0( \nu, \Omega ) phi( \nu, \Omega ) contributions...
+            Ibar00( : ) = IQUV( 1, : ) * slab%absorption_profile( k, :, angle )
+            Ibar20( : ) = 2d0**(-1.5d0) * ( ( 3d0 * mu**2 - 1d0 ) * IQUV( 1, : ) - 3d0 * ( 1d0 - mu**2 ) * ( cos_2gamma * IQUV( 2, : ) - sin_2gamma * IQUV( 3, : ) ) ) * slab%absorption_profile( k, :, angle )
+            ! ... and increment the corresponding Jbar tensors.
+            do line = 1, atom%ntran
+              begin_f = multiplets( line )%begin
+              end_f   = multiplets( line )%end
+              slab%Jbar00( line, k ) = slab%Jbar00( line, k ) &
+                + ( slab%aq_weight( angle ) / slab%absorption_profile_norm( k, line, angle ) ) * int_tabulated( -multiplets( line )%d_nus, Ibar00( begin_f:end_f ) ) 
+              slab%Jbar20( line, k ) = slab%Jbar20( line, k ) &
+                + ( slab%aq_weight( angle ) / slab%absorption_profile_norm( k, line, angle ) ) * int_tabulated( -multiplets( line )%d_nus, Ibar20( begin_f:end_f ) ) 
+            end do ! 1 <= line <= atom%ntran
 
           enddo ! kfrom <= k <= fto, with kstep, z-index of layers
 
@@ -529,11 +559,11 @@ contains
           !  IQUV( 4, 1:200 ) = IQUV( 4, 1:200 ) / maxval( IQUV( 1, 1:200 ) )
           !  IQUV( 1, 1:200 ) = IQUV( 1, 1:200 ) / maxval( IQUV( 1, 1:200 ) )
           !  IQUV( 1:4, 1:200 ) = IQUV( 1:4, 1:200 ) * 1d2
-            call gp%options( 'set style data linespoints; set grid; set key top left; set colorsequence classic' )
-            call gp%options( 'set xrange[-1.1:2.2];' )
-            write(tmp_str, '(i4)') angle
-            call gp%title( 'angle = ' // tmp_str  )
-            call gp%plot( multiplets(1)%d_lambdas, tau_nu( 1:200 ) )
+          !  call gp%options( 'set style data linespoints; set grid; set key top left; set colorsequence classic' )
+          !  call gp%options( 'set xrange[-1.1:2.2];' )
+          !  write(tmp_str, '(i4)') angle
+          !  call gp%title( 'angle = ' // tmp_str  )
+          !  call gp%plot( multiplets(1)%d_lambdas, tau_nu( 1:200 ) )
           !  call gp%plot( multiplets(1)%d_lambdas, transpose( IQUV( 1:4, 1:200 ) ) )
           !  !call gp%title( 'I/I_max'  )
           !  !call gp%title( 'Q/I_max'  )
@@ -547,31 +577,25 @@ contains
         enddo ! angle (RT FS)
         !=======================================================================
 
+        do line = 1, atom%ntran
+          wavelength = multiplets( line )%wl
+          slab%nbar(  line, : ) = slab%Jbar00( line, : ) * ( ( wavelength * 1d-8 )**3 / ( 2d0 * PC * PH ) )
+          slab%omega( line, : ) = slab%Jbar20( line, : ) / slab%Jbar00( line, : ) * sqrt( 2d0 )
+        end do ! 1 <= line <= atom%ntran
+
+        write( *, '(a, 2(es10.2), a, 2(es10.2))' ) '1) nbar = ', slab%nbar( 1, : ), ' omega = ', slab%omega( 1, : )
+        write( *, '(a, 2(es10.2), a, 2(es10.2))' ) '2) nbar = ', slab%nbar( 2, : ), ' omega = ', slab%omega( 2, : )
+        write( *, '(a, 2(es10.2), a, 2(es10.2))' ) '3) nbar = ', slab%nbar( 3, : ), ' omega = ', slab%omega( 3, : )
+        write( *, '(a, 2(es10.2), a, 2(es10.2))' ) '4) nbar = ', slab%nbar( 4, : ), ' omega = ', slab%omega( 4, : )
+
+        tolerance(1) = maxval( abs( slab%nbar  - slab%nbar_old  ) / abs( slab%nbar  ) )
+        tolerance(2) = maxval( abs( slab%omega - slab%omega_old ) / abs( slab%omega ) )
+
       stop
       enddo ! iteration & tolerance
 
 
         do while (iteration < 50 .and. maxval( tolerance ) > 1d-3 )
-
-            J00 = 0.d0
-            J20 = 0.d0
-            J00_nu = 0.d0
-            J20_nu = 0.d0
-
-! Solve the RT equation and calculate the tensors J00 and J20
-            do i = 1, in_fixed%no
-                call calculate_tensors(slab, i, J00_nu(:,i), J20_nu(:,i), in_fixed%gammad)
-            enddo
-
-! Carry out the integration over frequency weighted by the line profile                
-            do i = 1, slab%n_layers
-                J00(i) = J00(i) + int_tabulated(in_observation%freq, J00_nu(i,:)*prof)
-                J20(i) = J20(i) + int_tabulated(in_observation%freq, J20_nu(i,:)*prof)
-            enddo
-
-! Put the new values of nbar and omega
-            slab%nbar(:,1) = J00 * (in_fixed%wl*1.d-8)**3 / (2.d0*PC*PH)
-            slab%omega(:,1) = J20 / J00 * sqrt(2.d0)
 
             iteration = iteration + 1
 
@@ -584,8 +608,6 @@ contains
             write (*, '(a, i4, a, es20.8, a, i4)') 'Iteration: ', iteration - 1, ', max |do/o|: ', maxval(abs(slab%omega - slab%omega_old) / abs(slab%omega)), ' at layer ', maxloc(abs(slab%omega - slab%omega_old) / abs(slab%omega), 1)
             !-DEBUG
 
-            tolerance(1) = maxval(abs(slab%nbar - slab%nbar_old) / abs(slab%nbar))
-            tolerance(2) = maxval(abs(slab%omega - slab%omega_old) / abs(slab%omega))
 
             slab%nbar_old = slab%nbar
             slab%omega_old = slab%omega

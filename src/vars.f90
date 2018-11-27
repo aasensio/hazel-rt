@@ -92,7 +92,8 @@ implicit none
       emission_vector(:, :, :, :), &
       boundary(:, :, :), &
       absorption_profile(:, :, :), &
-      absorption_profile_norm(:, :, :)
+      absorption_profile_norm(:, :, :), &
+      Jbar00( :, : ), Jbar20( :, : )
   end type type_slab
 
 	type atom_model
