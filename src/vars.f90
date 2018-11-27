@@ -81,19 +81,19 @@ implicit none
 		real(kind=8), pointer :: stokes_unperturbed(:,:), stokes_perturbed(:,:), dydx(:,:,:)
 	end type type_inversion
 
-	type type_slab
-		integer :: n_layers, aq_size
-		real(kind=8), pointer :: nbar(:,:), omega(:,:), Lambda(:), tau(:,:)
-		real(kind=8), pointer :: nbar_old(:,:), omega_old(:,:)
+  type type_slab
+    integer :: n_layers, aq_size
+    real(kind=8), pointer :: nbar(:,:), omega(:,:), Lambda(:)
+    real(kind=8), pointer :: nbar_old(:,:), omega_old(:,:)
     real(kind=8), pointer :: z(:), density(:), v_z(:), B(:), thB(:), chiB(:), damping(:), vthermal(:)
     real(kind=8), pointer :: aq_azimuth(:), aq_inclination(:), aq_weight(:)
-		real(kind=8), pointer :: &
+    real(kind=8), pointer :: &
       propagation_matrix(:, :, :, :, :), &
       emission_vector(:, :, :, :), &
       boundary(:, :, :), &
       absorption_profile(:, :, :), &
       absorption_profile_norm(:, :, :)
-	end type type_slab
+  end type type_slab
 
 	type atom_model
 		integer :: ntran

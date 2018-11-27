@@ -44,7 +44,8 @@ contains
       IQUV( :, : ), &
       chim( : ), chi0( : ), chip( : ), dtm( : ), dtp( : ), exu( : ), &
       sm( :, : ), s0( :, : ), sp( :, : ), &
-      ab_matrix( :, :, :, : ), source_vector( :, :, : )
+      ab_matrix( :, :, :, : ), source_vector( :, :, : ), &
+      tau_nu( : ), tau( : )
     real(kind=8) :: dm, dp, psim, psi0, psip, mat1( 4, 4 ), mat2( 4, 4 )
 
     ! ogpf
@@ -179,13 +180,6 @@ contains
         end do ! 1 <= layer <= slab%n_layers
       end do ! 1 <= angle <= slab%aq_size
 
-      !allocate(slab%tau(slab%n_layers,in_fixed%no))
-
-      !allocate(J00_nu(slab%n_layers,in_fixed%no))
-      !allocate(J20_nu(slab%n_layers,in_fixed%no))
-      !allocate(J00(slab%n_layers))
-      !allocate(J20(slab%n_layers))
-
       !call gp%title( 'Absorption profile along different rays' )
       !call gp%xlabel ( 'd_lambda, A' )
       !call gp%ylabel ( 'phi, [Hz^{-1}]' )
@@ -209,6 +203,14 @@ contains
       allocate( sm( 4, spectrum_size ), source = 0d0 )
       allocate( s0( 4, spectrum_size ), source = 0d0 )
       allocate( sp( 4, spectrum_size ), source = 0d0 )
+
+      allocate( tau_nu( spectrum_size ), source = 0d0 )
+      allocate( tau( atom%ntran ), source = 0d0 )
+
+      !allocate(J00_nu(slab%n_layers,in_fixed%no))
+      !allocate(J20_nu(slab%n_layers,in_fixed%no))
+      !allocate(J00(slab%n_layers))
+      !allocate(J20(slab%n_layers))
 
       ! Initialize iterations
       tolerance = 100.d0
@@ -411,6 +413,10 @@ contains
           ! Initialize with the boundary conditions.
           IQUV( :, : ) = slab%boundary( :, :, angle )
 
+          ! Nullify the optical depth arrays.
+          tau_nu( : ) = 0d0
+          tau( : )    = 0d0
+
           ! Calculate J00 and J20
           continue
 
@@ -442,7 +448,7 @@ contains
                 mat1 = slab%propagation_matrix( :, :, k, f, angle )
                 call invert( mat1 )
                 IQUV( :, f ) = matmul( mat1, slab%emission_vector( :, k, f, angle ) )
-              enddo
+              end do
             else
               ! Full formal solution.
               if ( k == kto ) then
@@ -455,7 +461,7 @@ contains
                 s0( :, : ) = source_vector( :, k,  : )
                 sp( :, : ) = 0d0
                 dm = abs( ( slab%z( k ) - slab%z( km ) ) / mu )
-                dp = 0.d0
+                dp = 0d0
               else
                 ! Parabolic short-characteristics inbetween.
                 km = k - kstep
@@ -468,10 +474,13 @@ contains
                 sp( :, : ) = source_vector( :, kp, : )
                 dm = abs( ( slab%z( k  ) - slab%z( km ) ) / mu )
                 dp = abs( ( slab%z( kp ) - slab%z( k  ) ) / mu )
-              endif
+              end if
 
               dtm = 0.5d0 * dm * ( chim + chi0 ) 
               dtp = 0.5d0 * dp * ( chi0 + chip ) 
+
+              ! Increment the optical depth with the previous (km->k0) optical depth element.
+              tau_nu = tau_nu + dtm
 
               where ( dtm >= 1d-4 )
                 exu = exp( -dtm )
@@ -496,13 +505,21 @@ contains
                   IQUV( :, f ) = matmul( mat2, matmul( mat1, IQUV( :, f ) ) + psim * sm( :, f ) + psi0 * s0( :, f ) + psip * sp( :, f ) )
                 endif
 
-              enddo ! f
+              enddo ! 1 <= f <= spectrum_size
             end if ! is_horizontal_ray
 
             ! Increment J00 and J20
             continue
 
-          enddo ! k, z-index of layers
+          enddo ! kfrom <= k <= fto, with kstep, z-index of layers
+
+          ! Find maximal optical depth in each multiplet.
+          do line = 1, atom%ntran
+            begin_f = multiplets( line )%begin
+            end_f   = multiplets( line )%end
+            tau( line ) = maxval( tau_nu( begin_f:end_f ) )
+          end do ! 1 <= line <= atom%ntran
+          write(*, '(a, *(f5.2, x))') 'max tau(:) = ', tau
 
           ! Normalize IQUV
           !if ( mu > horizontal_mu_limit ) then
@@ -512,10 +529,11 @@ contains
           !  IQUV( 4, 1:200 ) = IQUV( 4, 1:200 ) / maxval( IQUV( 1, 1:200 ) )
           !  IQUV( 1, 1:200 ) = IQUV( 1, 1:200 ) / maxval( IQUV( 1, 1:200 ) )
           !  IQUV( 1:4, 1:200 ) = IQUV( 1:4, 1:200 ) * 1d2
-          !  call gp%options( 'set style data linespoints; set grid; set key top left; set colorsequence classic' )
-          !  call gp%options( 'set xrange[-1.1:2.2];' )
-          !  write(tmp_str, '(i4)') angle
-          !  call gp%title( 'angle = ' // tmp_str  )
+            call gp%options( 'set style data linespoints; set grid; set key top left; set colorsequence classic' )
+            call gp%options( 'set xrange[-1.1:2.2];' )
+            write(tmp_str, '(i4)') angle
+            call gp%title( 'angle = ' // tmp_str  )
+            call gp%plot( multiplets(1)%d_lambdas, tau_nu( 1:200 ) )
           !  call gp%plot( multiplets(1)%d_lambdas, transpose( IQUV( 1:4, 1:200 ) ) )
           !  !call gp%title( 'I/I_max'  )
           !  !call gp%title( 'Q/I_max'  )
@@ -696,9 +714,9 @@ contains
         open(unit=18,file='Jbar_tensors.dat',action='write',status='replace')
         write(18,*) slab%n_layers
         do i = 1, slab%n_layers
-            write(18,*) maxval(slab%tau(i,:)), slab%nbar(i,1), slab%omega(i,1)
+            !write(18,*) maxval(slab%tau(i,:)), slab%nbar(i,1), slab%omega(i,1)
             !+DEBUG
-            write (*, *) 'max tau, nbar, omega: ', maxval( slab%tau(i,:) ), slab%nbar(i,1), slab%omega(i,1)
+            !write (*, *) 'max tau, nbar, omega: ', maxval( slab%tau(i,:) ), slab%nbar(i,1), slab%omega(i,1)
             !-DEBUG
         enddo
         close(18)
@@ -868,7 +886,7 @@ contains
         allocate(total_tau(in_fixed%no))
 
         total_tau = 0.d0
-        slab%tau = 0.d0
+        !tau = 0.d0
 
         do freq = 1, in_fixed%no
                                 
@@ -926,7 +944,7 @@ contains
                 dtp = 0.5d0 * (chi0 + chip) * dp
 
                 total_tau(freq) = total_tau(freq) + dtm
-                slab%tau(k,freq) = slab%tau(km,freq) + dtm
+                !slab%tau(k,freq) = slab%tau(km,freq) + dtm
                     
                 if (dtm >= 1.d-4) then
                     exu = dexp(-dtm)
