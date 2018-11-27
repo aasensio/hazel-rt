@@ -3,7 +3,7 @@
 ***********************************************
 
 # Input model file
-'ATOMS/helium.mod'
+'ATOMS/helium_test.mod'
 
 # Initial parameters file
 'init_parameters.dat'
@@ -33,7 +33,7 @@
 'OBSERVATION/pru1.prof'
 
 # File with the slab model
-'SLABS/slab.model'
+'SLABS/slab_test.model'
 
 # File with the inverted profiles
 'test.inversion'
@@ -57,4 +57,4 @@
 5
 
 # Synthesis mode -> 0 , Inversion mode -> 1
--1
+0

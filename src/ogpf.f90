@@ -164,7 +164,7 @@ module ogpf
     ! Correct to meet the requirements on other OS like Linux and Mac.
     character(len=*), parameter ::  gnuplot_term_type = 'wxt'                      ! Output terminal
     character(len=*), parameter ::  gnuplot_term_font = 'verdana,10'               ! font
-    character(len=*), parameter ::  gnuplot_term_size = '1280,960'   !'960,840'                  ! plot window size
+    character(len=*), parameter ::  gnuplot_term_size = '1024,768'   !'960,840'                  ! plot window size
     character(len=*), parameter ::  gnuplot_output_filename='ogpf_temp_script.gp' ! temporary file for output
     ! extra configuration can be set using ogpf object
 

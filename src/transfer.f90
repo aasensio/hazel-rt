@@ -489,7 +489,7 @@ contains
 
                 call lin_sc( dtm( f ), psim, psi0 )
                 mat1 = exu( f ) * identity_4x4 - psim * ab_matrix( :, :, km, f )
-                mat2 =               identity_4x4 + psi0 * ab_matrix( :, :, k,  f )
+                mat2 =            identity_4x4 + psi0 * ab_matrix( :, :, k,  f )
                 call invert( mat2 )
 
                 if ( k == kto ) then
@@ -513,14 +513,23 @@ contains
           ! Normalize IQUV
           if ( mu > horizontal_mu_limit ) then
             write(*, *) angle, mu, maxval( IQUV( 1, 1:200 ) )
-            IQUV( 2, 1:200 ) = IQUV( 2, 1:200 ) / IQUV( 2, 1 )
-            IQUV( 3, 1:200 ) = IQUV( 3, 1:200 ) / IQUV( 3, 1 )
-            IQUV( 4, 1:200 ) = IQUV( 4, 1:200 ) / IQUV( 4, 1 )
-            IQUV( 1, 1:200 ) = IQUV( 1, 1:200 ) / IQUV( 1, 1 )
+            IQUV( 2, 1:200 ) = IQUV( 2, 1:200 ) / maxval( IQUV( 1, 1:200 ) )
+            IQUV( 3, 1:200 ) = IQUV( 3, 1:200 ) / maxval( IQUV( 1, 1:200 ) )
+            IQUV( 4, 1:200 ) = IQUV( 4, 1:200 ) / maxval( IQUV( 1, 1:200 ) )
+            IQUV( 1, 1:200 ) = IQUV( 1, 1:200 ) / maxval( IQUV( 1, 1:200 ) )
+            IQUV( 1:4, 1:200 ) = IQUV( 1:4, 1:200 ) * 1d2
             call gp%options( 'set style data linespoints; set grid; set key top left; set colorsequence classic' )
-            write(tmp_str, '(i4)') angle
-            call gp%title( 'angle = ' // tmp_str  )
-            call gp%plot( [(i * 1d0, i = 1, 200)], transpose( IQUV( 1:4, 1:200 ) ) )
+            call gp%options( 'set xrange[-1.1:2.2];' )
+            !write(tmp_str, '(i4)') angle
+            !call gp%title( 'angle = ' // tmp_str  )
+            call gp%title( 'I/I_max'  )
+            call gp%plot( multiplets(1)%d_lambdas, IQUV( 1, 1:200 ) )
+            call gp%title( 'Q/I_max'  )
+            call gp%plot( multiplets(1)%d_lambdas, IQUV( 2, 1:200 ) )
+            call gp%title( 'U/I_max'  )
+            call gp%plot( multiplets(1)%d_lambdas, IQUV( 3, 1:200 ) )
+            call gp%title( 'V/I_max'  )
+            call gp%plot( multiplets(1)%d_lambdas, IQUV( 4, 1:200 ) )
           endif
 
         enddo ! angle (RT FS)

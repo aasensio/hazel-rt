@@ -82,45 +82,25 @@ contains
       endif
 
     ! Reallocate all output arrays.
-    if ( allocated( epsilon ) ) then
-      deallocate( epsilon )
-    endif
+    if ( allocated( epsilon ) ) deallocate( epsilon )
     allocate( epsilon( 0:3, in_fixed%no ), source = 0d0 )
-    if ( allocated( epsilon_zeeman ) ) then
-      deallocate( epsilon_zeeman )
-    endif
+    if ( allocated( epsilon_zeeman ) ) deallocate( epsilon_zeeman )
     allocate( epsilon_zeeman( 0:3, in_fixed%no ), source = 0d0 )
-    if ( allocated( eta ) ) then
-      deallocate( eta )
-    endif
+    if ( allocated( eta ) ) deallocate( eta )
     allocate( eta( 0:3, in_fixed%no ), source = 0d0 )
-    if ( allocated( eta_zeeman ) ) then
-      deallocate( eta_zeeman )
-    endif
+    if ( allocated( eta_zeeman ) ) deallocate( eta_zeeman )
     allocate( eta_zeeman( 0:3, in_fixed%no ), source = 0d0 )
-    if ( allocated( eta_stim ) ) then
-      deallocate( eta_stim )
-    endif
+    if ( allocated( eta_stim ) ) deallocate( eta_stim )
     allocate( eta_stim( 0:3, in_fixed%no ), source = 0d0 )
-    if ( allocated( eta_stim_zeeman ) ) then
-      deallocate( eta_stim_zeeman )
-    endif
+    if ( allocated( eta_stim_zeeman ) ) deallocate( eta_stim_zeeman )
     allocate( eta_stim_zeeman( 0:3, in_fixed%no ), source = 0d0 )
-    if ( allocated( mag_opt ) ) then
-      deallocate( mag_opt )
-    endif
+    if ( allocated( mag_opt ) ) deallocate( mag_opt )
     allocate( mag_opt( 0:3, in_fixed%no ), source = 0d0 )
-    if ( allocated( mag_opt_zeeman ) ) then
-      deallocate( mag_opt_zeeman )
-    endif
+    if ( allocated( mag_opt_zeeman ) ) deallocate( mag_opt_zeeman )
     allocate( mag_opt_zeeman( 0:3, in_fixed%no ), source = 0d0 )
-    if ( allocated( mag_opt_stim ) ) then
-      deallocate( mag_opt_stim )
-    endif
+    if ( allocated( mag_opt_stim ) ) deallocate( mag_opt_stim )
     allocate( mag_opt_stim( 0:3, in_fixed%no ), source = 0d0 )
-    if ( allocated( mag_opt_stim_zeeman ) ) then
-      deallocate( mag_opt_stim_zeeman )
-    endif
+    if ( allocated( mag_opt_stim_zeeman ) ) deallocate( mag_opt_stim_zeeman )
     allocate( mag_opt_stim_zeeman( 0:3, in_fixed%no ), source = 0d0 )
 
     ! Get the Doppler width in Hz using Eq. (5.43) from the Book:

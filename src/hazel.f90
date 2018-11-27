@@ -141,11 +141,11 @@ implicit none
         call do_synthesis(params, fixed, observation, inversion%stokes_unperturbed, error)
         call write_final_profiles(output_inverted_profiles,observation,inversion)
     endif
-    
+
 !*********************************
 !** INVERSION MODE
 !*********************************
-    if (working_mode >= 0 .and. nprocs >= 0) then
+    if (working_mode > 0 .and. nprocs >= 0) then
         if (verbose_mode == 1 .and. myrank == 0) then
             print *, 'Working in INVERSION mode'
         endif
