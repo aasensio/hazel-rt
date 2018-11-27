@@ -56,7 +56,7 @@ contains
             if (in_fixed%use_atomic_pol == -1) then
                 w = 0.d0                
             endif
-                
+
             aesto(nt) = atom%ae(nt)
             ntlsto(nt) = atom%nterml(nt)
             ntusto(nt) = atom%ntermu(nt)
@@ -66,7 +66,7 @@ contains
             gei(1) = nbar * atom%j10(nt)
             gei(2) = nbar * w / sqrt(2.d0)
 
-            
+
 !----------------------------------------------------------------------
 !----- Relaxation rates due to spontaneous emission
 !----------------------------------------------------------------------
@@ -767,7 +767,7 @@ contains
                 endif
             enddo           
         endif
-        
+
 !-----------------------------------------------------------------------
 !----- If imag=1, we add the term produced by the magnetic field. We first build
 !----- the magnetic matrix SEE_mag_A and then add this contribution to the total matrix
@@ -929,19 +929,17 @@ contains
 !           call slapsolver(SEE_A,SEE_b)
         end select
 
-    
-! Write the solution
-!       open(unit=7,file='tanti.res',status='unknown')
-!       do i = 1, nrhos 
-!           write(7,FMT='(7(1x,i5),1x,e15.7)') i,ntab(i),j2tab(i),jp2tab(i),ktab(i),qtab(i),&
-!               irtab(i),SEE_b(i)
-!       enddo
-!       close(7)
-        
+        ! Write the solution
+        !open( unit = 7, file = 'tanti.res', status = 'unknown' )
+        !do i = 1, nrhos 
+        !  write(7, '(7(1x,i5),1x,e15.7)') i, ntab(i), j2tab(i), jp2tab(i), ktab(i), qtab(i), irtab(i), SEE_b(i)
+        !enddo
+        !close(7)
+
 !       deallocate(aesto)
 !       deallocate(ntlsto)
 !       deallocate(ntusto)
-        
+
 !       deallocate(SEE_A)
 !       deallocate(SEE_mag_A)
 !       deallocate(SEE_b)

@@ -221,8 +221,8 @@ contains
           !in_params%chibd2
           !in_params%thetabd2
           in_params%bgauss  = slab%B(    layer )
-          in_params%chibd   = slab%thB(  layer )
-          in_params%thetabd = slab%chiB( layer )
+          in_params%thetabd = slab%thB(  layer )
+          in_params%chibd   = slab%chiB( layer )
 
           ! ...pass the new nbar and omega in the current layer.
           nbarExternal  = slab%nbar(  layer, : )
