@@ -91,7 +91,8 @@ implicit none
       propagation_matrix(:, :, :, :, :), &
       emission_vector(:, :, :, :), &
       boundary(:, :, :), &
-      absorption_profile(:, :, :)
+      absorption_profile(:, :, :), &
+      absorption_profile_norm(:, :, :)
 	end type type_slab
 
 	type atom_model

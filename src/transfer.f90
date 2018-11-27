@@ -146,7 +146,7 @@ contains
 
       ! Generate the absorption profile.
       allocate( slab%absorption_profile(      slab%n_layers, spectrum_size, slab%aq_size ), source = 0d0 )
-      !allocate( slab%absorption_profile_norm( slab%n_layers,    atom%ntran, slab%aq_size ), source = 0d0 )
+      allocate( slab%absorption_profile_norm( slab%n_layers,    atom%ntran, slab%aq_size ), source = 0d0 )
 
       do angle = 1, slab%aq_size
         do layer = 1, slab%n_layers
@@ -171,13 +171,13 @@ contains
                 / ( d_nu_dopp * SQRTPI ) &
               )
 
-            ! Calculate the norm of the (incomplete) profile.
-            !slab%absorption_profile_norm( layer, line, angle ) = &
-            !  int_tabulated(  )
+            ! Calculate the norm of the (incomplete) profile.  Negate the
+            ! frequency shfits as in the calculation of the profile.
+            slab%absorption_profile_norm( layer, line, angle ) = &
+              int_tabulated( -multiplets( line )%d_nus, slab%absorption_profile( layer, begin_f:end_f, angle ) )
           end do ! 1 <= line <= atom%ntran
         end do ! 1 <= layer <= slab%n_layers
       end do ! 1 <= angle <= slab%aq_size
-      stop
 
       !allocate(slab%tau(slab%n_layers,in_fixed%no))
 
