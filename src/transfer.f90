@@ -51,7 +51,7 @@ contains
 
     ! ogpf
     type(gpf) :: gp
-    character(len=4) :: tmp_str
+    character(len=4) :: fmt_str
 
       if ( verbose_mode == 1 ) then
           print *, 'Starting transfer...'
@@ -387,10 +387,11 @@ contains
         slab%Jbar00( :, : ) = 0d0
         slab%Jbar20( :, : ) = 0d0
 
-        ! Now solve the transfer equation and intergrate the radiation field tensors.
+        ! Now solve the transfer equation and intergrate the radiation field
+        ! tensors at the same time.
         !=======================================================================
-        ! First, iterate angles as the last one will be the required LoS for the
-        ! intensity output.
+        ! First, iterate angles because the last angle must bhe the requested
+        ! LoS for the intensity output.
         do angle = 1, slab%aq_size
 
           mu = cos( slab%aq_inclination( angle ) * PI / 180d0 )
@@ -561,8 +562,8 @@ contains
           !  IQUV( 1:4, 1:200 ) = IQUV( 1:4, 1:200 ) * 1d2
           !  call gp%options( 'set style data linespoints; set grid; set key top left; set colorsequence classic' )
           !  call gp%options( 'set xrange[-1.1:2.2];' )
-          !  write(tmp_str, '(i4)') angle
-          !  call gp%title( 'angle = ' // tmp_str  )
+          !  write(fmt_str, '(i4)') angle
+          !  call gp%title( 'angle = ' // fmt_str )
           !  call gp%plot( multiplets(1)%d_lambdas, tau_nu( 1:200 ) )
           !  call gp%plot( multiplets(1)%d_lambdas, transpose( IQUV( 1:4, 1:200 ) ) )
           !  !call gp%title( 'I/I_max'  )
@@ -572,50 +573,44 @@ contains
           !  !call gp%plot( multiplets(1)%d_lambdas, IQUV( 3, 1:200 ) )
           !  !call gp%title( 'V/I_max'  )
           !  !call gp%plot( multiplets(1)%d_lambdas, IQUV( 4, 1:200 ) )
-          !endif
+          !en dif
 
-        enddo ! angle (RT FS)
+        end do ! angle (RT FS)
         !=======================================================================
 
+        ! Evaluate nbar and omega from computed tensors.
         do line = 1, atom%ntran
           wavelength = multiplets( line )%wl
           slab%nbar(  line, : ) = slab%Jbar00( line, : ) * ( ( wavelength * 1d-8 )**3 / ( 2d0 * PC * PH ) )
           slab%omega( line, : ) = slab%Jbar20( line, : ) / slab%Jbar00( line, : ) * sqrt( 2d0 )
+          if ( verbose_mode == 1 ) then
+            write(fmt_str, '(i4)') slab%n_layers
+            write(*, '(4x, a, f9.3, 2(a, ' // fmt_str //  '(x, e8.2)))') 'Wavelength = ', wavelength, ' A, nbar =', slab%nbar(  line, : ), ', omega =', slab%omega( line, : )
+          end if
         end do ! 1 <= line <= atom%ntran
 
-        write( *, '(a, 2(es10.2), a, 2(es10.2))' ) '1) nbar = ', slab%nbar( 1, : ), ' omega = ', slab%omega( 1, : )
-        write( *, '(a, 2(es10.2), a, 2(es10.2))' ) '2) nbar = ', slab%nbar( 2, : ), ' omega = ', slab%omega( 2, : )
-        write( *, '(a, 2(es10.2), a, 2(es10.2))' ) '3) nbar = ', slab%nbar( 3, : ), ' omega = ', slab%omega( 3, : )
-        write( *, '(a, 2(es10.2), a, 2(es10.2))' ) '4) nbar = ', slab%nbar( 4, : ), ' omega = ', slab%omega( 4, : )
+        tolerance( 1 ) = maxval( abs( slab%nbar  - slab%nbar_old  ) / abs( slab%nbar_old  ) )
+        tolerance( 2 ) = maxval( abs( slab%omega - slab%omega_old ) / abs( slab%omega_old ) )
 
-        tolerance(1) = maxval( abs( slab%nbar  - slab%nbar_old  ) / abs( slab%nbar  ) )
-        tolerance(2) = maxval( abs( slab%omega - slab%omega_old ) / abs( slab%omega ) )
+        write(*, '(4x, a, i4, 2(a, e8.2))') 'Iteration ', iteration, ': max|dn/n| = ', tolerance( 1 ), ', max|dw/w| = ', tolerance( 2 )
 
+        slab%nbar_old(  :, : ) = slab%nbar(  :, : )
+        slab%omega_old( :, : ) = slab%omega( :, : )
+
+        iteration = iteration + 1
+
+      end do ! iteration & tolerance
+
+      IQUV( 2, 1:200 ) = IQUV( 2, 1:200 ) / maxval( IQUV( 1, 1:200 ) )
+      IQUV( 3, 1:200 ) = IQUV( 3, 1:200 ) / maxval( IQUV( 1, 1:200 ) )
+      IQUV( 4, 1:200 ) = IQUV( 4, 1:200 ) / maxval( IQUV( 1, 1:200 ) )
+      IQUV( 1, 1:200 ) = IQUV( 1, 1:200 ) / maxval( IQUV( 1, 1:200 ) )
+      IQUV( 1:4, 1:200 ) = IQUV( 1:4, 1:200 ) * 1d2
+      call gp%options( 'set style data linespoints; set grid; set key top left; set colorsequence classic' )
+      call gp%options( 'set xrange[-1.1:2.2];' )
+      call gp%plot( multiplets(1)%d_lambdas, tau_nu( 1:200 ) )
+      call gp%plot( multiplets(1)%d_lambdas, transpose( IQUV( 1:4, 1:200 ) ) )
       stop
-      enddo ! iteration & tolerance
-
-
-        do while (iteration < 50 .and. maxval( tolerance ) > 1d-3 )
-
-            iteration = iteration + 1
-
-            !+DEBUG
-            !write (*, '(a, i4, a, 2es20.8)') 'Iteration: ', iteration - 1, ', nbar:     ', slab%nbar
-            !write (*, '(a, i4, a, 2es20.8)') 'Iteration: ', iteration - 1, ', nbar_old: ', slab%nbar_old
-            !write (*, '(a, i4, a, 2es20.8)') 'Iteration: ', iteration - 1, ', omega:     ', slab%omega
-            !write (*, '(a, i4, a, 2es20.8)') 'Iteration: ', iteration - 1, ', omega_old: ', slab%omega_old
-            write (*, '(a, i4, a, es20.8, a, i4)') 'Iteration: ', iteration - 1, ', max |dn/n|: ', maxval(abs(slab%nbar - slab%nbar_old) / abs(slab%nbar)), ' at layer ', maxloc(abs(slab%nbar - slab%nbar_old) / abs(slab%nbar), 1)
-            write (*, '(a, i4, a, es20.8, a, i4)') 'Iteration: ', iteration - 1, ', max |do/o|: ', maxval(abs(slab%omega - slab%omega_old) / abs(slab%omega)), ' at layer ', maxloc(abs(slab%omega - slab%omega_old) / abs(slab%omega), 1)
-            !-DEBUG
-
-
-            slab%nbar_old = slab%nbar
-            slab%omega_old = slab%omega
-
-            !print *, 'Maximum relative change : ', tolerance
-            !write (*, '(a, i4, a, 2es9.2)') 'Iteration: ', iteration - 1, ', max. rel. change: ', tolerance
-
-        enddo
 
 ! Recompute the propagation matrix and emission vector for the last time
 ! for the synthesis of the Stokes profiles
